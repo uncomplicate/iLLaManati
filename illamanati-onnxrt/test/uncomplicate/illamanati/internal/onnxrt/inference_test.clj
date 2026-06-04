@@ -78,8 +78,7 @@
                                     decode-opts)
                mem-info (memory-info (device (neanderthal-factory fact :float)) :device 0 :default)
                gemma3 (text-model fact mem-info prefill-sess decode-sess
-                                  "inputs_embeds" "attention_mask" nil "logits"
-                                  2 1 4)
+                                  ["inputs_embeds" "attention_mask"] ["logits"] 4)
                input-embeds (tensor fact [batch-size seq-len hidden-size] :float :ncw)
                prefill-mask (tensor vect-fact [batch-size total-seq-len] :long :nc)
                prefill-logits (tensor fact [batch-size seq-len vocab-size] :float :ncw)]

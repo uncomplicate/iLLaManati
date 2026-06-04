@@ -182,13 +182,15 @@
     (AFn/applyToHelper this xs)))
 
 (defn text-model [fact mem-info prefill-sess decode-sess
-                  embeds-name attention-mask-name position-ids-name logits-name
-                  input-offset output-offset
+                  [embeds-name attention-mask-name position-ids-name :as input-names]
+                  [logits-name :as output-names]
                   max-seq-len]
   (with-release [embeds-type-info (input-type-info decode-sess 0)
                  attention-mask-type-info (input-type-info decode-sess 1)
                  position-ids-type-info (when position-ids-name (input-type-info decode-sess 2))
                  logits-type-info (output-type-info decode-sess 0)
+                 input-offset (long (count (filter identity input-names)))
+                 output-offset (long (count (filter identity output-names)))
                  kv-type-info (input-type-info prefill-sess input-offset)]
     (let [neand-fact (neanderthal-factory fact)
           embeds-info (cast-type embeds-type-info)
