@@ -57,10 +57,10 @@
                threading-opt (-> (threading-options)
                                  (denormal-as-zero!)
                                  (spin-control! true))
-               env (telemetry! (environment :verbose (name (gensym "diamond_onnxrt_")) {:inter-op-threads 1
-                                                                                        :intra-op-threads 8
-                                                                                        :denormal-as-zero true
-                                                                                        :spin true}))
+               env (telemetry! (environment :verbose (name (gensym "illamanati_")) {:inter-op-threads 1
+                                                                                    :intra-op-threads 8
+                                                                                    :denormal-as-zero true
+                                                                                    :spin true}))
                prefill-opts (-> (options)
                                 (execution-mode! :sequential)
                                 (override-dimension! "batch_size" batch-size)
@@ -90,4 +90,4 @@
    (seq (transfer! prefill-logits (double-array 3))) => [-12.705020904541016 12.854991912841797 0.18065690994262695]
    (transfer! (repeat 0.1) (.decode-embeds gemma3)) ;;TODO do it in text-model initialization
    (seq (transfer! (time (gemma3)) (double-array 3))) => [-12.020591735839844 13.310209274291992 2.906890869140625]
-   (seq (transfer! (time (gemma3)) (double-array 3))) => (throws ExceptionInfo)))
+   (gemma3) => (throws ExceptionInfo)))
