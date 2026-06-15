@@ -8,13 +8,15 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.inference
-  (:require [uncomplicate.commons [core :refer [let-release with-release Releaseable release Info size sizeof]]]
+  (:require [uncomplicate.commons
+             [core :refer [let-release with-release Releaseable release Info size sizeof]]
+             [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer get-entry position! long-pointer put-entry!]]
             [uncomplicate.neanderthal
              [core :refer [iamax transfer! native view-vctr entry!]]
              [block :refer [buffer]]]
             [uncomplicate.diamond
-             [tensor :refer [Transfer tensor output shape data-type]]
+             [tensor :refer [Transfer tensor output shape data-type layout view-tz offset! transformer]]
              [dnn :refer [network activation]]
              [onnxrt :refer [onnx]]]
             [uncomplicate.diamond.internal.protocols :refer [neanderthal-factory DiamondFactoryProvider]]
@@ -29,6 +31,8 @@
   (:import [clojure.lang IFn AFn]))
 
 (defprotocol KVManager
+  (base-tz [this])
+  (max-seq-len [this])
   (bind-past-kv!
     [this binding past-seq-len]
     [this binding past-seq-len idx])
@@ -52,6 +56,7 @@
                               base-tz
                               ^long layer-stride
                               ^long num-layers
+                              ^long max-seq-len
                               layers
                               kv-type
                               shape]
@@ -64,6 +69,10 @@
       (free present-name))
     (release base-tz))
   KVManager
+  (base-tz [_]
+    base-tz)
+  (max-seq-len [_]
+    max-seq-len)
   (bind-past-kv! [this binding! past-seq-len]
     (let [current-shape (assoc shape 2 past-seq-len)]
       (doseq [[kv _ past-name _] layers]
@@ -109,13 +118,41 @@
                          [kv (value-tensor-info kv) past-name present-name]))
                      (range num-layers) past-names present-names)]
     (->ContiguousKVManager ort-api free mem-info base-tz
-                           layer-stride num-layers layers kv-type max-shape)))
+                           layer-stride num-layers max-seq-len layers kv-type max-shape)))
 
-(defn bind-kv! [[past present past-seq-len] binding! ^long seq-len]
-  (let [total-seq-len (+ (long past-seq-len) seq-len)]
-    [(bind-present-kv! present binding! total-seq-len)
-     (bind-past-kv! past binding! past-seq-len)
-     total-seq-len]))
+(defn kv-shifter [src dst ^long seq-len]
+  (let [sub-shape (update (shape dst) 3 (fn ^long [^long x] (- x seq-len)))
+        token-shift (* seq-len (get (layout dst) 3))]
+    (if (< 0 (get sub-shape 3))
+      (let-release [view-dst (view-tz dst sub-shape)
+                    view-src (offset! (view-tz src sub-shape) token-shift)]
+        (transformer view-src view-dst))
+      (dragan-says-ex "You can't shift more tokens than kv-cache holds."
+                      {:required seq-len
+                       :available (get (shape dst) 3)}))))
+
+(defn bind-kv! [[past present past-seq-len past->present present->past] binding! ^long seq-len]
+  (let [total-seq-len (+ (long past-seq-len) seq-len)
+        base (base-tz past)
+        max-seq-len (long (max-seq-len past))]
+    (if (< max-seq-len total-seq-len)
+      (let [shift-amount (- total-seq-len max-seq-len)
+            effective-past-len (- past-seq-len shift-amount)]
+        (if (= 1 shift-amount)
+          (past->present)
+          (with-release [dynamic-shifter (kv-shifter base (base-tz present) shift-amount)]
+            (dynamic-shifter)))
+        [(bind-present-kv! past binding! max-seq-len)
+         (bind-past-kv! present binding! effective-past-len)
+         max-seq-len
+         past->present
+         present->past])
+      [(bind-present-kv! present binding! total-seq-len)
+       (bind-past-kv! past binding! past-seq-len)
+       total-seq-len
+       present->past
+       past->present])))
+
 
 (deftype TextModel [mem-info
                     prefill-sess prefill! prefill-bind
@@ -143,7 +180,7 @@
     (release decode-position-ids)
     (release decode-logits)
     (release attention-info)
-    (run! release (take 2 (deref kvmans))))
+    (run! release (deref kvmans)))
   IFn
   (invoke [_ embeds attention-mask position-ids logits!]
     (let [[_ seq-len :as embeds-shape] (shape embeds)
@@ -170,7 +207,9 @@
   (invoke [this embeds attention-mask logits!]
     (.invoke this embeds attention-mask nil logits!))
   (invoke [_]
-    (swap! attention-shape update 1 inc)
+    (swap! attention-shape update 1 (fn ^long [^long x]
+                                      (min (max-seq-len ((deref kvmans) 0))
+                                           (inc x))))
     (with-release [mask-view (onnx-tensor mem-info (deref attention-shape)
                                           (buffer decode-attention-mask)
                                           (data-type decode-attention-mask))]
@@ -214,7 +253,9 @@
                              (sizeof temp))
           layer-capacity (* batch-size num-heads max-seq-len head-dim)
           layer-stride (align-up layer-capacity kv-element-width)
-          total-elements (* num-layers layer-stride)]
+          total-elements (* num-layers layer-stride)
+          kv-5d-shape [num-layers batch-size num-heads max-seq-len head-dim]
+          kv-5d-strides [layer-stride layer-capacity (* max-seq-len head-dim) head-dim 1]]
       (let-release [prefill! (runner* prefill-sess)
                     prefill-bind (io-binding prefill-sess)
                     decode! (runner* decode-sess)
@@ -239,16 +280,18 @@
                     onnx-decode-logits (onnx-tensor mem-info [batch-size 1 logits-dim]
                                                     (buffer decode-logits) logits-type)
                     attention-info (value-tensor-info onnx-decode-attention-mask)
-                    base-tz-desc (tensor-desc fact neand-fact [total-elements] kv-type)
+                    base-tz-desc (tensor-desc fact neand-fact kv-5d-shape kv-type kv-5d-strides)
                     base-tz-a (create-tz fact neand-fact base-tz-desc)
                     base-tz-b (create-tz fact neand-fact base-tz-desc)
+                    a->b (kv-shifter base-tz-a base-tz-b 1)
+                    b->a (kv-shifter base-tz-b base-tz-a 1)
                     kvm-a (contiguous-kv-manager prefill-sess mem-info base-tz-a kv-type
                                                  input-offset output-offset
                                                  batch-size num-heads max-seq-len head-dim)
                     kvm-b (contiguous-kv-manager prefill-sess mem-info base-tz-b kv-type
                                                  input-offset output-offset
                                                  batch-size num-heads max-seq-len head-dim)
-                    kvmans (atom [kvm-a kvm-b 0])]
+                    kvmans (atom [kvm-a kvm-b 0 a->b b->a])]
         (transfer! (repeat 1) decode-attention-mask)
         (bind-input! decode-bind embeds-name onnx-decode-embeds)
         (when decode-position-ids (bind-input! decode-bind position-ids-name onnx-decode-position-ids))

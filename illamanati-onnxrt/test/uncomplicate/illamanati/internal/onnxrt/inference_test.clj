@@ -90,4 +90,4 @@
    (seq (transfer! prefill-logits (double-array 3))) => [-12.705020904541016 12.854991912841797 0.18065690994262695]
    (transfer! (repeat 0.1) (.decode-embeds gemma3)) ;;TODO do it in text-model initialization
    (seq (transfer! (time (gemma3)) (double-array 3))) => [-12.020591735839844 13.310209274291992 2.906890869140625]
-   (gemma3) => (throws ExceptionInfo)))
+   (time (gemma3)) => (time (gemma3))))
