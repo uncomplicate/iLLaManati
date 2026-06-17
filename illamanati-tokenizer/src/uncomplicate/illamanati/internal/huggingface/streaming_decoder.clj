@@ -35,7 +35,7 @@
     (dotimes [i 128]
       (aset-byte ba i (byte i)))
     (dotimes [id (min 256 (alength vocabulary-lookup))]
-      (let [token (aget vocabulary-lookup id)]
+      (let [token ^String (aget vocabulary-lookup id)]
         (when (= 1 (.length token))
           (let [unicode-char (int (.charAt token 0))]
             (aset-byte ba unicode-char (unchecked-byte id))))))
@@ -53,8 +53,8 @@
                          (map (juxt #(get % "content")
                                     #(get % "id"))
                               (get data "added_tokens")))
-        max-id (apply max (vals full-vocab))
-        lookup-array (make-array String (inc max-id))]
+        max-id (long (apply max (vals full-vocab)))
+        lookup-array ^"[Ljava.lang.String;" (make-array String (inc max-id))]
     (loop [detected nil vocab full-vocab]
       (if-let [[token-str id] (first vocab)]
         (do (aset lookup-array id (str token-str))

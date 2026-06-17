@@ -10,8 +10,8 @@
     uncomplicate.illamanati.tokenizer
   (:require [uncomplicate.illamanati.internal.protocols :as api]))
 
-(defn encoder [tokenizer text]
-  (api/encoder tokenizer text))
+(defn encode [tokenizer text]
+  (api/encode tokenizer text))
 
 (defn decoder [tokenizer]
   (api/decoder tokenizer))

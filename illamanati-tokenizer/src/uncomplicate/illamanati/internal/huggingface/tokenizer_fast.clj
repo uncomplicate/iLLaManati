@@ -149,13 +149,13 @@
 
 (extend-type String
   Encodable
-  (encode [text hft]
+  (encode [text ^HuggingFaceTokenizer hft]
     (.encode hft text)))
 
 (extend-type (Class/forName "[Ljava.lang.String;")
   Encodable
-  (encode [text hft]
-    (.batchEncode hft text)))
+  (encode [text ^HuggingFaceTokenizer hft]
+    (.batchEncode hft ^"[Ljava.lang.String;" text)))
 
 ;; ================= Decodables ================================================
 
@@ -163,26 +163,18 @@
 
 (extend-type (Class/forName "[[J")
   Decodable
-  (decode [srcs hft]
+  (decode [srcs ^HuggingFaceTokenizer hft]
     (.batchDecode hft srcs)))
 
 (extend-type (Class/forName "[[I")
   Decodable
-  (decode [^"[[I" srcs hft]
-    (let [len (alength srcs)
-          dest (make-array Long/TYPE len 0)]
-      (dotimes [i len]
-        (aset dest i (ints->longs (aget srcs i))))
-      (.batchDecode hft dest))))
+  (decode [srcs ^HuggingFaceTokenizer hft]
+    (.batchDecode hft (ints->longs srcs (make-array Integer/TYPE (alength ^ints srcs) 0)))))
 
 (extend-type (Class/forName "[[S")
   Decodable
-  (decode [^"[[S" srcs hft]
-    (let [len (alength srcs)
-          dest (make-array Long/TYPE len 0)]
-      (dotimes [i len]
-        (aset dest i (shorts->longs (aget srcs i))))
-      (.batchDecode hft dest))))
+  (decode [srcs ^HuggingFaceTokenizer hft]
+    (.batchDecode hft (shorts->longs srcs (make-array Long/TYPE (alength ^shorts srcs) 0)))))
 
 ;; -------------- 1D arrays ----------------------------------------------------
 
@@ -198,7 +190,7 @@
   (from-longs [this! src]
     (lp->lp src this!))
   Decodable
-  (decode [src hft]
+  (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft src)))
 
 (extend-type (Class/forName "[I")
@@ -213,7 +205,7 @@
   (from-longs [this! src]
     (longs->ints src this!))
   Decodable
-  (decode [src hft]
+  (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft (ints->longs src))))
 
 (extend-type (Class/forName "[S")
@@ -228,7 +220,7 @@
   (from-longs [this! src]
     (longs->shorts src this!))
   Decodable
-  (decode [src hft]
+  (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft (shorts->longs src))))
 
 (extend-type LongPointer
@@ -243,7 +235,7 @@
   (from-longs [this! src]
     (longs->lp src this!))
   Decodable
-  (decode [src hft]
+  (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft (lp->longs src))))
 
 (extend-type IntPointer
@@ -258,7 +250,7 @@
   (from-longs [this! src]
     (longs->ip src this!))
   Decodable
-  (decode [src hft]
+  (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft (ip->longs src))))
 
 (extend-type ShortPointer
@@ -273,21 +265,16 @@
   (from-longs [this! src]
     (longs->ip src this!))
   Decodable
-  (decode [src hft]
+  (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft (sp->longs src))))
 
 (extend-type java.util.List
   Encodable
-  (encode [text hft]
+  (encode [text ^HuggingFaceTokenizer hft]
     (.batchEncode hft text))
   Decodable
-  (decode [src hft]
+  (decode [src ^HuggingFaceTokenizer hft]
     (.batchDecode hft src)))
-
-(extend-type java.util.Collections
-  Encodable
-  (encode [text hft]
-    (.batchEncode hft text)))
 
 (extend-type clojure.lang.Sequential
   CoerceLongArray
@@ -299,7 +286,7 @@
   (from-longs [this src]
     (into (empty this) src))
   Decodable
-  (decode [src hft]
+  (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft (long-array src))))
 
 ;; ============= Vectors and matrices ==========================================
@@ -323,7 +310,7 @@
       (transfer! src this!))
     this!)
   Decodable
-  (decode [data hft]
+  (decode [data ^HuggingFaceTokenizer hft]
     (.decode hft (to-longs data))))
 
 (extend-type IntegerMatrix
@@ -363,12 +350,14 @@
           n (.sd stor)]
       (if (contiguous? this!)
         (dotimes [i batch]
-          (from-longs (buffer (.stripe nav this! i)) (.getIds ^Encoding (aget encodings i))))
+          (from-longs (buffer (.stripe nav this! i))
+                      (.getIds ^Encoding (aget ^"[Lai.djl.huggingface.tokenizers.Encoding;" encodings i))))
         (dotimes [i batch]
-          (transfer! (.getIds ^Encoding (aget encodings i)) (.stripe nav this! i))))
+          (transfer! (.getIds ^Encoding (aget ^"[Lai.djl.huggingface.tokenizers.Encoding;" encodings i))
+                     (.stripe nav this! i))))
       this!))
   Decodable
-  (decode [data hft]
+  (decode [data ^HuggingFaceTokenizer hft]
     (.batchDecode hft (to-longs data))))
 
 ;; ============== HUF extensions ===============================================
@@ -379,7 +368,8 @@
     (.close hft))
   Releaseable
   (release [_]
-    (.close hft))
+    (.close hft)
+    true)
   api/Encoder
   (encode [this text]
     (encode text hft))
@@ -395,8 +385,8 @@
            (with-open [is1 (input-stream source)]
              (streaming-decoder is1)))
     (instance? InputStream source)
-    (with-open [stream source]
-      (hft (.readAllBytes ^InputStream stream)))
+    (with-open [stream ^InputStream source]
+      (hft (.readAllBytes stream)))
     :default (hft (input-stream source))))
 
 (extend-type Encoding
