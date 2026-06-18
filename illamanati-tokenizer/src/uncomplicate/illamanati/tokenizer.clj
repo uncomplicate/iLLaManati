@@ -10,6 +10,9 @@
     uncomplicate.illamanati.tokenizer
   (:require [uncomplicate.illamanati.internal.protocols :as api]))
 
+(defprotocol TokenizerProvider
+  (tokenizer [this]))
+
 (defn encode [tokenizer text]
   (api/encode tokenizer text))
 

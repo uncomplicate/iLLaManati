@@ -13,10 +13,10 @@
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer get-entry position! long-pointer put-entry!]]
             [uncomplicate.neanderthal
-             [core :refer [iamax transfer! native view-vctr entry!]]
+             [core :refer [iamax transfer! native view-vctr entry! view-vctr view-ge submatrix copy!]]
              [block :refer [buffer]]]
             [uncomplicate.diamond
-             [tensor :refer [Transfer tensor output shape data-type layout view-tz offset! transformer]]
+             [tensor :refer [Transfer tensor output shape data-type layout view-tz offset! transformer *diamond-factory*]]
              [dnn :refer [network activation]]
              [onnxrt :refer [onnx]]]
             [uncomplicate.diamond.internal.protocols :refer [neanderthal-factory DiamondFactoryProvider]]
@@ -153,14 +153,13 @@
        present->past
        past->present])))
 
-
 (deftype TextModel [mem-info
                     prefill-sess prefill! prefill-bind
                     decode-sess decode! decode-bind
                     embeds-name decode-embeds onnx-decode-embeds
                     attention-mask-name decode-attention-mask onnx-decode-attention-mask
                     position-ids-name decode-position-ids onnx-decode-position-ids
-                    logits-name decode-logits onnx-decode-logits
+                    logits-name decode-logits onnx-decode-logits ge-decode-logits
                     kvmans
                     attention-shape attention-info]
   Releaseable
@@ -181,10 +180,17 @@
     (release decode-logits)
     (release attention-info)
     (run! release (deref kvmans)))
+  Transfer
+  (input [_]
+    decode-embeds)
+  (output [_]
+    decode-logits)
   IFn
   (invoke [_ embeds attention-mask position-ids logits!]
     (let [[_ seq-len :as embeds-shape] (shape embeds)
-          [_ total-seq-len :as attention-mask-shape] (shape attention-mask)]
+          [_ total-seq-len :as attention-mask-shape] (shape attention-mask)
+          [batch-size _ vocab-size :as sub-shape] (shape logits!)
+          batch-data-len (* (long seq-len) (long vocab-size))]
       (with-release [onnx-embeds (onnx-tensor mem-info embeds-shape (buffer embeds) (data-type embeds))
                      onnx-attention-mask (onnx-tensor mem-info attention-mask-shape
                                                       (buffer attention-mask)
@@ -195,7 +201,12 @@
                                                       (data-type position-ids))
                                          nil)
                      onnx-logits (onnx-tensor mem-info (shape logits!)
-                                              (buffer logits!) (data-type logits!))]
+                                              (buffer logits!) (data-type logits!))
+                     last-logits (submatrix (view-ge (view-vctr logits!)
+                                                     batch-data-len
+                                                     batch-size)
+                                            (- batch-data-len (long vocab-size)) 0
+                                            vocab-size batch-size)]
         (bind-input! prefill-bind embeds-name onnx-embeds)
         (bind-input! prefill-bind attention-mask-name onnx-attention-mask)
         (when onnx-position-ids (bind-input! prefill-bind position-ids-name onnx-position-ids))
@@ -203,10 +214,11 @@
         (swap! kvmans bind-kv! prefill-bind seq-len)
         (swap! attention-shape assoc 1 total-seq-len)
         (prefill! prefill-bind)
-        logits!)))
+        (copy! last-logits ge-decode-logits)
+        decode-logits)))
   (invoke [this embeds attention-mask logits!]
     (.invoke this embeds attention-mask nil logits!))
-  (invoke [_]
+  (invoke [_];;TODO when we reach max context, we don't need to update attention shape any more.
     (swap! attention-shape update 1 (fn ^long [^long x]
                                       (min (max-seq-len ((deref kvmans) 0))
                                            (inc x))))
@@ -223,6 +235,7 @@
 (defn text-model [fact mem-info prefill-sess decode-sess
                   [embeds-name attention-mask-name position-ids-name :as input-names]
                   [logits-name :as output-names]
+                  decode-embeds
                   max-seq-len]
   (with-release [embeds-type-info (input-type-info decode-sess 0)
                  attention-mask-type-info (input-type-info decode-sess 1)
@@ -238,14 +251,14 @@
           logits-info (cast-type logits-type-info)
           kv-info (cast-type kv-type-info)
           [batch-size num-heads _ head-dim] (onnx/shape kv-info)
+          hidden-size (get (onnx/shape embeds-info) 2)
           embeds-type (tensor-type embeds-info)
-          embeds-dim (peek (onnx/shape embeds-info))
           attention-mask-type (tensor-type attention-mask-info)
           attention-shape (atom [batch-size 0])
           position-ids-type (when position-ids-info (tensor-type position-ids-info))
           logits-type (tensor-type logits-info)
           logits-shape (onnx/shape logits-info)
-          logits-dim (peek logits-shape)
+          vocab-size (peek logits-shape)
           num-layers (- (input-count prefill-sess) input-offset)
           kv-type (tensor-type kv-info)
           kv-type-pointer (onnx-data-type-pointer kv-type)
@@ -260,25 +273,29 @@
                     prefill-bind (io-binding prefill-sess)
                     decode! (runner* decode-sess)
                     decode-bind (io-binding decode-sess)
-                    decode-embeds-desc (tensor-desc fact neand-fact [batch-size 1 embeds-dim] embeds-type)
-                    decode-embeds (create-tz fact neand-fact decode-embeds-desc)
-                    onnx-decode-embeds (onnx-tensor mem-info [batch-size 1 embeds-dim]
+                    onnx-decode-embeds (onnx-tensor mem-info [batch-size 1 hidden-size]
                                                     (buffer decode-embeds) embeds-type)
-                    decode-attention-mask-desc (tensor-desc fact neand-fact [batch-size max-seq-len] attention-mask-type)
+                    decode-attention-mask-desc (tensor-desc fact neand-fact [batch-size max-seq-len]
+                                                            attention-mask-type)
                     decode-attention-mask (create-tz fact neand-fact decode-attention-mask-desc)
                     onnx-decode-attention-mask (onnx-tensor mem-info [batch-size max-seq-len]
-                                                            (buffer decode-attention-mask) attention-mask-type)
+                                                            (buffer decode-attention-mask)
+                                                            attention-mask-type)
                     decode-position-ids-desc (when position-ids-type
-                                               (tensor-desc fact neand-fact [batch-size 1] position-ids-type))
+                                               (tensor-desc fact neand-fact
+                                                            [batch-size 1] position-ids-type))
                     decode-position-ids (when position-ids-type
                                           (create-tz fact neand-fact decode-position-ids-desc))
                     onnx-decode-position-ids (when position-ids-type
                                                (onnx-tensor mem-info [batch-size 1]
-                                                            (buffer decode-position-ids) position-ids-type))
-                    decode-logits-desc (tensor-desc fact neand-fact [batch-size 1 logits-dim] logits-type)
+                                                            (buffer decode-position-ids)
+                                                            position-ids-type))
+                    decode-logits-desc (tensor-desc fact neand-fact [batch-size 1 vocab-size]
+                                                    logits-type)
                     decode-logits (create-tz fact neand-fact decode-logits-desc)
-                    onnx-decode-logits (onnx-tensor mem-info [batch-size 1 logits-dim]
+                    onnx-decode-logits (onnx-tensor mem-info [batch-size 1 vocab-size]
                                                     (buffer decode-logits) logits-type)
+                    ge-decode-logits (view-ge (view-vctr decode-logits) vocab-size batch-size)
                     attention-info (value-tensor-info onnx-decode-attention-mask)
                     base-tz-desc (tensor-desc fact neand-fact kv-5d-shape kv-type kv-5d-strides)
                     base-tz-a (create-tz fact neand-fact base-tz-desc)
@@ -302,6 +319,97 @@
                      embeds-name decode-embeds onnx-decode-embeds
                      attention-mask-name decode-attention-mask onnx-decode-attention-mask
                      position-ids-name decode-position-ids onnx-decode-position-ids
-                     logits-name decode-logits onnx-decode-logits
+                     logits-name decode-logits onnx-decode-logits ge-decode-logits
                      kvmans
                      attention-shape attention-info)))))
+
+(deftype EmbeddingModel [mem-info
+                         prefill-sess prefill! prefill-bind
+                         decode-sess decode! decode-bind
+                         input-ids-name decode-input-ids onnx-decode-input-ids
+                         image-features-name onnx-decode-image-features
+                         embeds-name decode-embeds onnx-decode-embeds]
+  Releaseable
+  (release [_]
+    (release prefill-sess)
+    (release prefill!)
+    (release prefill-bind)
+    (release decode-sess)
+    (release decode!)
+    (release decode-bind)
+    (release onnx-decode-input-ids)
+    (release onnx-decode-image-features)
+    (release onnx-decode-embeds)
+    (release decode-input-ids)
+    (release decode-embeds))
+  Transfer
+  (input [_]
+    decode-input-ids)
+  (output [_]
+    decode-embeds)
+  IFn
+  (invoke [_ input-ids image-features embeds!]
+    (let [[batch-size seq-len :as input-ids-shape] (shape input-ids)]
+      (with-release [onnx-input-ids (onnx-tensor mem-info input-ids-shape
+                                                 (buffer input-ids) (data-type input-ids))
+                     onnx-image-features (if image-features
+                                           (onnx-tensor mem-info (shape image-features)
+                                                        (buffer image-features)
+                                                        (data-type image-features))
+                                           nil)
+                     onnx-embeds (onnx-tensor mem-info (shape embeds!)
+                                              (buffer embeds!) (data-type embeds!))]
+        (bind-input! prefill-bind input-ids-name onnx-input-ids)
+        (bind-input! prefill-bind image-features-name
+                     (or onnx-image-features onnx-decode-image-features))
+        (bind-output! prefill-bind embeds-name onnx-embeds)
+        (prefill! prefill-bind)
+        embeds!)))
+  (invoke [this input-ids embeds!]
+    (.invoke this input-ids nil embeds!))
+  (invoke [_]
+    (decode! decode-bind)
+    decode-embeds)
+  (applyTo [this xs]
+    (AFn/applyToHelper this xs)))
+
+(defn embedding-model [fact mem-info prefill-sess decode-sess
+                       [input-ids-name image-features-name]
+                       [embeds-name]]
+  (with-release [input-ids-type-info (input-type-info decode-sess 0)
+                 image-features-type-info (input-type-info decode-sess 1)
+                 embeds-type-info (output-type-info decode-sess 0)]
+    (let [neand-fact (neanderthal-factory fact)
+          input-ids-info (cast-type input-ids-type-info)
+          image-features-info (cast-type image-features-type-info)
+          embeds-info (cast-type embeds-type-info)
+          [batch-size _ hidden-size] (onnx/shape embeds-info)
+          input-ids-type (tensor-type input-ids-info)
+          image-features-type (tensor-type image-features-info)
+          embeds-type (tensor-type embeds-info)]
+      (let-release [prefill! (runner* prefill-sess)
+                    prefill-bind (io-binding prefill-sess)
+                    decode! (runner* decode-sess)
+                    decode-bind (io-binding decode-sess)
+                    decode-input-ids-desc (tensor-desc fact neand-fact [batch-size 1] input-ids-type)
+                    decode-input-ids (create-tz fact neand-fact decode-input-ids-desc)
+                    onnx-decode-input-ids (onnx-tensor mem-info [batch-size 1]
+                                                       (buffer decode-input-ids) input-ids-type)
+                    decode-embeds-desc (tensor-desc fact neand-fact [batch-size 1 hidden-size]
+                                                    embeds-type)
+                    decode-embeds (create-tz fact neand-fact decode-embeds-desc)
+                    onnx-decode-embeds (onnx-tensor mem-info [batch-size 1 hidden-size]
+                                                    (buffer decode-embeds) embeds-type)
+                    onnx-decode-image-features (onnx-tensor mem-info [0 0 hidden-size]
+                                                            (buffer decode-embeds)
+                                                            image-features-type)]
+
+        (bind-input! decode-bind input-ids-name onnx-decode-input-ids)
+        (bind-input! decode-bind image-features-name onnx-decode-image-features)
+        (bind-output! decode-bind embeds-name onnx-decode-embeds)
+        (->EmbeddingModel mem-info
+                          prefill-sess prefill! prefill-bind
+                          decode-sess decode! decode-bind
+                          input-ids-name decode-input-ids onnx-decode-input-ids
+                          image-features-name onnx-decode-image-features
+                          embeds-name decode-embeds onnx-decode-embeds)))))

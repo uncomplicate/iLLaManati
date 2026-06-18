@@ -1,4 +1,4 @@
-(defproject illamanati-onnxrt "0.1.0-SNAPSHOT"
+(defproject org.uncomplicate/illamanati-onnxrt "0.1.0-SNAPSHOT"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
@@ -13,7 +13,8 @@
                  [uncomplicate/deep-diamond "0.45.0-SNAPSHOT"]
                  [org.uncomplicate/deep-diamond-dnnl "0.45.0-SNAPSHOT"]
                  [org.uncomplicate/diamond-onnxrt "0.25.0-SNAPSHOT"]
-                 [org.bytedeco/openvino-platform "2026.1.0-1.5.14-SNAPSHOT"]]
+                 [org.bytedeco/openvino-platform "2026.1.0-1.5.14-SNAPSHOT"]
+                 [org.uncomplicate/illamanati-tokenizer "0.1.0-SNAPSHOT"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
