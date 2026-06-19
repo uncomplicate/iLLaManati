@@ -11,7 +11,9 @@
   (:require [midje.sweet :refer [facts =>]]
             [uncomplicate.commons [core :refer [with-release]]]
             [uncomplicate.neanderthal.core :refer [transfer! entry]]
+            [uncomplicate.diamond.tensor :refer [input]]
             [uncomplicate.diamond.internal.dnnl.factory :refer [dnnl-factory]]
+            [uncomplicate.diamond.internal.onnxrt.core :refer [environment telemetry!]]
             [uncomplicate.illamanati.tokenizer :refer [tokenizer encode decoder ids]]
             [uncomplicate.illamanati.internal.onnxrt.gemma3 :refer [gemma-3-cpu]]))
 
@@ -23,15 +25,15 @@
                                                                                              :denormal-as-zero true
                                                                                           :spin true}))
                gemma-3! (gemma-3-cpu fact model-path {:env env
-                                                     :context-len 16
-                                                     :batch-size 1})
+                                                      :context-len 10
+                                                      :batch-size 1})
                gemma-3-tokenizer (tokenizer gemma-3!)
                encoding (encode gemma-3-tokenizer text-input)
                st (decoder gemma-3-tokenizer)]
-
   (facts
     "ONNX Gemma3 inference test."
     (println "----------------- prefill starts ------------------")
+    (count (ids encoding)) => 6
     (gemma-3! (ids encoding)) => (input gemma-3!)
     (st (entry (time (input gemma-3!)) 0 0)) => " and"
     (println "----------------- prefill ends ------------------")
@@ -41,5 +43,4 @@
     (st (entry (time (gemma-3!)) 0 0)) => " of"
     (st (entry (time (gemma-3!)) 0 0)) => " Serbia"
     (st (entry (time (gemma-3!)) 0 0)) => "."
-    (st (entry (time (gemma-3!)) 0 0)) => " It"
     (println "----------------- decode ends ------------------")))

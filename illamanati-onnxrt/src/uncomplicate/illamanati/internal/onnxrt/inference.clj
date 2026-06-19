@@ -74,17 +74,23 @@
   (max-seq-len [_]
     max-seq-len)
   (bind-past-kv! [this binding! past-seq-len]
-    (let [current-shape (assoc shape 2 past-seq-len)]
-      (doseq [[kv _ past-name _] layers]
-        (with-release [kv-view (onnx-tensor mem-info current-shape (mutable-data kv) kv-type)]
-          (bind-input* ort-api binding! past-name kv-view))))
-    this)
+    (if (<= 0 (long past-seq-len))
+      (let [current-shape (assoc shape 2 past-seq-len)]
+        (doseq [[kv _ past-name _] layers]
+          (with-release [kv-view (onnx-tensor mem-info current-shape (mutable-data kv) kv-type)]
+            (bind-input* ort-api binding! past-name kv-view)))
+        this)
+      (dragan-says-ex "Please don't try to process prompts leading to negative kv-cache size."
+                      {:past-seq-len past-seq-len})))
   (bind-present-kv! [this binding! total-seq-len]
-    (let [current-shape (assoc shape 2 total-seq-len)]
-      (doseq [[kv _ _ present-name] layers]
-        (with-release [kv-view (onnx-tensor mem-info current-shape (mutable-data kv) kv-type)]
-          (bind-output* ort-api binding! present-name kv-view))))
-    this))
+    (if (<= 0 (long total-seq-len))
+      (let [current-shape (assoc shape 2 total-seq-len)]
+        (doseq [[kv _ _ present-name] layers]
+          (with-release [kv-view (onnx-tensor mem-info current-shape (mutable-data kv) kv-type)]
+            (bind-output* ort-api binding! present-name kv-view)))
+        this)
+      (dragan-says-ex "Please don't try to process prompts leading to negative kv-cache size."
+                      {:total-seq-len total-seq-len}))))
 
 (defn element-alignment ^long [data-type]
   (case data-type
@@ -121,7 +127,7 @@
                            layer-stride num-layers max-seq-len layers kv-type max-shape)))
 
 (defn kv-shifter [src dst ^long seq-len]
-  (let [sub-shape (update (shape dst) 3 (fn ^long [^long x] (- x seq-len)))
+  (let [sub-shape (update (shape dst) 3 - seq-len)
         token-shift (* seq-len (get (layout dst) 3))]
     (if (< 0 (get sub-shape 3))
       (let-release [view-dst (view-tz dst sub-shape)
@@ -131,17 +137,34 @@
                       {:required seq-len
                        :available (get (shape dst) 3)}))))
 
-(defn bind-kv! [[past present past-seq-len past->present present->past] binding! ^long seq-len]
+(defn bind-kv-linear! [[past present past-seq-len] binding! ^long seq-len]
+  (let [total-seq-len (+ (long past-seq-len) seq-len)
+        base (base-tz past)
+        max-seq-len (long (max-seq-len past))]
+    (if (< max-seq-len total-seq-len)
+      (dragan-says-ex "KVCache limit reached. This model does not support complex KV management."
+                      {:total-seq-len total-seq-len
+                       :max-seq-len max-seq-len})
+      [(bind-present-kv! present binding! total-seq-len)
+       (bind-past-kv! past binding! past-seq-len)
+       total-seq-len])))
+
+(defn bind-kv-sliding! [[past present past-seq-len past->present present->past] binding! ^long seq-len]
   (let [total-seq-len (+ (long past-seq-len) seq-len)
         base (base-tz past)
         max-seq-len (long (max-seq-len past))]
     (if (< max-seq-len total-seq-len)
       (let [shift-amount (- total-seq-len max-seq-len)
             effective-past-len (- past-seq-len shift-amount)]
-        (if (= 1 shift-amount)
-          (past->present)
-          (with-release [dynamic-shifter (kv-shifter base (base-tz present) shift-amount)]
-            (dynamic-shifter)))
+        (if (<= 0 effective-past-len)
+          (if (= 1 shift-amount)
+            (past->present)
+            (with-release [dynamic-shifter (kv-shifter base (base-tz present) shift-amount)]
+              (dynamic-shifter)))
+          (dragan-says-ex "Please don't try to process prompts leading to negative kv-cache size."
+                          {:effective-past-len effective-past-len
+                           :total-seq-len total-seq-len
+                           :max-seq-len max-seq-len}))
         [(bind-present-kv! past binding! max-seq-len)
          (bind-past-kv! present binding! effective-past-len)
          max-seq-len
@@ -160,7 +183,7 @@
                     attention-mask-name decode-attention-mask onnx-decode-attention-mask
                     position-ids-name decode-position-ids onnx-decode-position-ids
                     logits-name decode-logits onnx-decode-logits ge-decode-logits
-                    kvmans
+                    kvmans bind-kv
                     attention-shape attention-info]
   Releaseable
   (release [_]
@@ -218,7 +241,7 @@
         decode-logits)))
   (invoke [this embeds attention-mask logits!]
     (.invoke this embeds attention-mask nil logits!))
-  (invoke [_];;TODO when we reach max context, we don't need to update attention shape any more.
+  (invoke [_]
     (swap! attention-shape update 1 (fn ^long [^long x]
                                       (min (max-seq-len ((deref kvmans) 0))
                                            (inc x))))
@@ -320,7 +343,7 @@
                      attention-mask-name decode-attention-mask onnx-decode-attention-mask
                      position-ids-name decode-position-ids onnx-decode-position-ids
                      logits-name decode-logits onnx-decode-logits ge-decode-logits
-                     kvmans
+                     kvmans (if decode-position-ids bind-kv-sliding! bind-kv-linear!)
                      attention-shape attention-info)))))
 
 (deftype EmbeddingModel [mem-info
