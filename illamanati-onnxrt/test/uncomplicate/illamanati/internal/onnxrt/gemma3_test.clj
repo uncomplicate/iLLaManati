@@ -25,7 +25,7 @@
                                                                                              :denormal-as-zero true
                                                                                           :spin true}))
                gemma-3! (gemma-3-cpu fact model-path {:env env
-                                                      :context-len 10
+                                                      :context-len 12
                                                       :batch-size 1})
                gemma-3-tokenizer (tokenizer gemma-3!)
                encoding (encode gemma-3-tokenizer text-input)

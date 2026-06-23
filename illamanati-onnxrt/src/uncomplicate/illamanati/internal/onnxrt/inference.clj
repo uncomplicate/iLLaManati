@@ -234,7 +234,7 @@
         (bind-input! prefill-bind attention-mask-name onnx-attention-mask)
         (when onnx-position-ids (bind-input! prefill-bind position-ids-name onnx-position-ids))
         (bind-output! prefill-bind logits-name onnx-logits)
-        (swap! kvmans bind-kv! prefill-bind seq-len)
+        (swap! kvmans bind-kv prefill-bind seq-len)
         (swap! attention-shape assoc 1 total-seq-len)
         (prefill! prefill-bind)
         (copy! last-logits ge-decode-logits)
@@ -249,7 +249,7 @@
                                           (buffer decode-attention-mask)
                                           (data-type decode-attention-mask))]
       (bind-input! decode-bind attention-mask-name mask-view)
-      (swap! kvmans bind-kv! decode-bind 1)
+      (swap! kvmans bind-kv decode-bind 1)
       (decode! decode-bind)
       decode-logits))
   (applyTo [this xs]

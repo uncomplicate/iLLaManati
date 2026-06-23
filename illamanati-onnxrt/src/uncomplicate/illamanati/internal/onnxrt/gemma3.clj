@@ -9,7 +9,7 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.gemma3
   (:require [uncomplicate.commons
-             [core :refer [let-release with-release Releaseable release Info size sizeof]]
+             [core :refer [let-release with-release Releaseable release Info size sizeof releaseable]]
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer get-entry position! long-pointer put-entry!]]
             [uncomplicate.neanderthal
@@ -89,8 +89,9 @@
   (init [this _]
     this)
   IFn
-  (invoke [_ ids]
-    (let [seq-len (count (if (number? (first ids)) ids (first ids)))
+  (invoke [_ ids];;TODO generalize. Reuse common bits so it's easier to support new model types.
+    ;;TODO maybe even separate prefill and decode objects in inference...
+    (let [seq-len (if (number? (first ids)) (count ids) (max (map count ids)))
           total-seq-len seq-len
           hidden-size (:hidden-size gemma-3-default)
           vocab-size (:vocab-size gemma-3-default)];;TODO generalize
@@ -99,27 +100,27 @@
                      prefill-mask-desc (tensor-desc [batch-size total-seq-len] :long)
                      prefill-logits-desc (tensor-desc [batch-size seq-len vocab-size] :float)
                      input-ids (create-tz input-ids-desc)
-                     input-embeds! (create-tz input-embeds-desc)
+                     input-embeds! (create-tz input-embeds-desc);;TODO generalize
                      prefill-mask (create-tz prefill-mask-desc)
-                     prefill-logits! (create-tz prefill-logits-desc)]
+                     prefill-logits! (create-tz prefill-logits-desc)];;TODO generalize
         (transfer! ids (view-ge (view-vctr input-ids) seq-len batch-size))
         (entry! (view-vctr prefill-mask) 1)
         (embedding-model! input-ids input-embeds!)
         (text-model! input-embeds! prefill-mask prefill-logits!)
-        (sample! (output text-model!) (input embedding-model!))
-        (input embedding-model!))))
+        (sample!))))
   (invoke [_]
     (embedding-model!)
     (text-model!)
-    (sample! (output text-model!) (input embedding-model!))
-    (input embedding-model!)))
+    (sample!)))
 
-(defn argmax-sampler [logits input-ids!];; TODO ATM just a naive placeholder. Use snapdragan later.
+(defn argmax-sampler [logits input-ids!];; TODO ATM just a naive placeholder. Use snapdragan later. Use floats, and convert non-floats to floats. Use connector for easy if-needed transformations.
   (let [[batch-size seq-size vocab-size] (shape logits)]
     (if (and (= 1 seq-size) (contiguous? logits) (contiguous? input-ids!))
-      (with-release [logits-ge (view-ge (view-vctr logits) vocab-size batch-size)]
-        (dotimes [i batch-size]
-          (entry! (col input-ids! i) (imax (col logits-ge i)))))
+      (let-release [logits-ge (view-ge (view-vctr logits) vocab-size batch-size)]
+        (releaseable (fn []
+                       (dotimes [i batch-size]
+                         (entry! (col input-ids! i) (imax (col logits-ge i))))
+                       input-ids!)))
       (dragan-says-ex "This sampler is intended to sample the last token of a contiguous tensor, not the whole history."
                       {:seq-size seq-size}))))
 
@@ -146,14 +147,15 @@
                                                       embedding-decode-sess embedding-inputs embedding-outputs)
                    gemma-3-text (text-model fact mem-info text-prefill-sess text-decode-sess
                                             text-inputs text-outputs
-                                            (output gemma-3-embedding) context-len)]
+                                            (output gemma-3-embedding) context-len)
+                   sample (argmax-sampler (output gemma-3-text) (input gemma-3-embedding))]
        (->Gemma3 fact tokenizer-constructor
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
-                 gemma-3-embedding gemma-3-text argmax-sampler
+                 gemma-3-embedding gemma-3-text sample
                  batch-size))))
   ([model-path args]
    (gemma-3-cpu *diamond-factory* model-path args))
   ([model-path]
    (gemma-3-cpu model-path nil)))
 
-;; TODO decode is covered by snapdragan, with the note that I should support half-precision through tensors (so I need to extend the implementation to support tensor-based data)
+;; TODO decode is covered by snapdragan, with the note that I should support half-precision through tensors (so I need to extend the implementation to support tensor-based data). Don't overcomplicate. Use floats and provide a simple connector from the source!
