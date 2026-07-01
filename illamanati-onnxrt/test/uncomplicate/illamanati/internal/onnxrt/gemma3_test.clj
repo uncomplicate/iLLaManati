@@ -23,7 +23,7 @@
                env (telemetry! (environment :verbose (name (gensym "illamanati_onnxrt_")) #_{:inter-op-threads 1
                                                                                              :intra-op-threads 8
                                                                                              :denormal-as-zero true
-                                                                                          :spin true}))
+                                                                                             :spin true}))
                gemma-3! (gemma-3-cpu fact model-path {:env env
                                                       :context-len 12
                                                       :batch-size 1})
@@ -34,13 +34,12 @@
     "ONNX Gemma3 inference test."
     (println "----------------- prefill starts ------------------")
     (count (ids encoding)) => 6
-    (gemma-3! (ids encoding)) => (input gemma-3!)
-    (st (entry (time (input gemma-3!)) 0 0)) => " and"
+    (st (first (time (gemma-3! (ids encoding) nil)))) => " and"
     (println "----------------- prefill ends ------------------")
     (println "----------------- decode starts ------------------")
-    (st (entry (time (gemma-3!)) 0 0)) => " largest"
-    (st (entry (time (gemma-3!)) 0 0)) => " city"
-    (st (entry (time (gemma-3!)) 0 0)) => " of"
-    (st (entry (time (gemma-3!)) 0 0)) => " Serbia"
-    (st (entry (time (gemma-3!)) 0 0)) => "."
+    (st (first (time (gemma-3! nil)))) => " largest"
+    (st (first (time (gemma-3! nil)))) => " city"
+    (st (first (time (gemma-3! nil)))) => " of"
+    (st (first (time (gemma-3! nil)))) => " Serbia"
+    (st (first (time (gemma-3! nil)))) => "."
     (println "----------------- decode ends ------------------")))

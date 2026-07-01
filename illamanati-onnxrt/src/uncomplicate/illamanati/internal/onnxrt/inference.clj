@@ -13,7 +13,7 @@
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer get-entry position! long-pointer put-entry!]]
             [uncomplicate.neanderthal
-             [core :refer [iamax transfer! native view-vctr entry! view-vctr view-ge submatrix copy!]]
+             [core :refer [iamax transfer! native view-vctr entry! view-vctr view-ge submatrix copy! dim]]
              [block :refer [buffer]]]
             [uncomplicate.diamond
              [tensor :refer [Transfer tensor output shape data-type layout view-tz offset! transformer *diamond-factory*]]
@@ -89,7 +89,7 @@
           (with-release [kv-view (onnx-tensor mem-info current-shape (mutable-data kv) kv-type)]
             (bind-output* ort-api binding! present-name kv-view)))
         this)
-      (dragan-says-ex "Please don't try to process prompts leading to negative kv-cache size."
+      (dragan-says-ex "please don't try to process prompts leading to negative kv-cache size."
                       {:total-seq-len total-seq-len}))))
 
 (defn element-alignment ^long [data-type]
@@ -133,7 +133,7 @@
       (let-release [view-dst (view-tz dst sub-shape)
                     view-src (offset! (view-tz src sub-shape) token-shift)]
         (transformer view-src view-dst))
-      (dragan-says-ex "You can't shift more tokens than kv-cache holds."
+      (dragan-says-ex "you can't shift more tokens than kv-cache holds."
                       {:required seq-len
                        :available (get (shape dst) 3)}))))
 
@@ -142,7 +142,7 @@
         base (base-tz past)
         max-seq-len (long (max-seq-len past))]
     (if (< max-seq-len total-seq-len)
-      (dragan-says-ex "KVCache limit reached. This model does not support complex KV management."
+      (dragan-says-ex "kvcache limit reached. this model does not support complex kv management."
                       {:total-seq-len total-seq-len
                        :max-seq-len max-seq-len})
       [(bind-present-kv! present binding! total-seq-len)
@@ -177,8 +177,7 @@
        past->present])))
 
 (deftype TextModel [mem-info
-                    prefill-sess prefill! prefill-bind
-                    decode-sess decode! decode-bind
+                    sess run-session! prefill-bind decode-bind
                     embeds-name decode-embeds onnx-decode-embeds
                     attention-mask-name decode-attention-mask onnx-decode-attention-mask
                     position-ids-name decode-position-ids onnx-decode-position-ids
@@ -187,11 +186,9 @@
                     attention-shape attention-info]
   Releaseable
   (release [_]
-    (release prefill-sess)
-    (release prefill!)
+    (release sess)
+    (release run-session!)
     (release prefill-bind)
-    (release decode-sess)
-    (release decode!)
     (release decode-bind)
     (release onnx-decode-embeds)
     (release onnx-decode-attention-mask)
@@ -210,20 +207,19 @@
     decode-logits)
   IFn
   (invoke [_ embeds attention-mask position-ids logits!]
-    (let [[_ seq-len :as embeds-shape] (shape embeds)
-          [_ total-seq-len :as attention-mask-shape] (shape attention-mask)
-          [batch-size _ vocab-size :as sub-shape] (shape logits!)
+    (let [[_ seq-len :as embeds-shape] (vec (take 3 (shape embeds)))
+          [_ total-seq-len :as attention-mask-shape] (vec (take 3 (shape attention-mask)))
+          [batch-size _ vocab-size :as sub-shape] (vec (take 3 (shape logits!)))
           batch-data-len (* (long seq-len) (long vocab-size))]
       (with-release [onnx-embeds (onnx-tensor mem-info embeds-shape (buffer embeds) (data-type embeds))
                      onnx-attention-mask (onnx-tensor mem-info attention-mask-shape
                                                       (buffer attention-mask)
                                                       (data-type attention-mask))
-                     onnx-position-ids (if position-ids
-                                         (onnx-tensor mem-info (shape position-ids)
+                     onnx-position-ids (when position-ids
+                                         (onnx-tensor mem-info (vec (take 2 (shape position-ids)))
                                                       (buffer position-ids)
-                                                      (data-type position-ids))
-                                         nil)
-                     onnx-logits (onnx-tensor mem-info (shape logits!)
+                                                      (data-type position-ids)))
+                     onnx-logits (onnx-tensor mem-info sub-shape
                                               (buffer logits!) (data-type logits!))
                      last-logits (submatrix (view-ge (view-vctr logits!)
                                                      batch-data-len
@@ -232,11 +228,13 @@
                                             vocab-size batch-size)]
         (bind-input! prefill-bind embeds-name onnx-embeds)
         (bind-input! prefill-bind attention-mask-name onnx-attention-mask)
-        (when onnx-position-ids (bind-input! prefill-bind position-ids-name onnx-position-ids))
+        (when position-ids
+          (transfer! (cycle batch-size (range (- total-seq-len seq-len) total-seq-len)) position-ids) ;;TODO support rolling kvs; TODO write specialized kernel; TODO generalize
+          (bind-input! prefill-bind position-ids-name onnx-position-ids))
         (bind-output! prefill-bind logits-name onnx-logits)
         (swap! kvmans bind-kv prefill-bind seq-len)
         (swap! attention-shape assoc 1 total-seq-len)
-        (prefill! prefill-bind)
+        (run-session! prefill-bind)
         (copy! last-logits ge-decode-logits)
         decode-logits)))
   (invoke [this embeds attention-mask logits!]
@@ -249,24 +247,27 @@
                                           (buffer decode-attention-mask)
                                           (data-type decode-attention-mask))]
       (bind-input! decode-bind attention-mask-name mask-view)
+      (when decode-position-ids
+        (transfer! (repeat (dim decode-position-ids) (get (deref kvmans) 2))
+                   decode-position-ids));;TODO until entry! is supported, use transfer!
       (swap! kvmans bind-kv decode-bind 1)
-      (decode! decode-bind)
+      (run-session! decode-bind)
       decode-logits))
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
 
-(defn text-model [fact mem-info prefill-sess decode-sess
+(defn text-model [fact mem-info sess
                   [embeds-name attention-mask-name position-ids-name :as input-names]
                   [logits-name :as output-names]
                   decode-embeds
                   max-seq-len]
-  (with-release [embeds-type-info (input-type-info decode-sess 0)
-                 attention-mask-type-info (input-type-info decode-sess 1)
-                 position-ids-type-info (when position-ids-name (input-type-info decode-sess 2))
-                 logits-type-info (output-type-info decode-sess 0)
+  (with-release [embeds-type-info (input-type-info sess 0)
+                 attention-mask-type-info (input-type-info sess 1)
+                 position-ids-type-info (when position-ids-name (input-type-info sess 2))
+                 logits-type-info (output-type-info sess 0)
                  input-offset (long (count (filter identity input-names)))
                  output-offset (long (count (filter identity output-names)))
-                 kv-type-info (input-type-info prefill-sess input-offset)]
+                 kv-type-info (input-type-info sess input-offset)]
     (let [neand-fact (neanderthal-factory fact)
           embeds-info (cast-type embeds-type-info)
           attention-mask-info (cast-type attention-mask-type-info)
@@ -282,7 +283,7 @@
           logits-type (tensor-type logits-info)
           logits-shape (onnx/shape logits-info)
           vocab-size (peek logits-shape)
-          num-layers (- (input-count prefill-sess) input-offset)
+          num-layers (- (input-count sess) input-offset)
           kv-type (tensor-type kv-info)
           kv-type-pointer (onnx-data-type-pointer kv-type)
           kv-element-width (with-release [temp (kv-type-pointer 1)]
@@ -292,10 +293,9 @@
           total-elements (* num-layers layer-stride)
           kv-5d-shape [num-layers batch-size num-heads max-seq-len head-dim]
           kv-5d-strides [layer-stride layer-capacity (* max-seq-len head-dim) head-dim 1]]
-      (let-release [prefill! (runner* prefill-sess)
-                    prefill-bind (io-binding prefill-sess)
-                    decode! (runner* decode-sess)
-                    decode-bind (io-binding decode-sess)
+      (let-release [run-session! (runner* sess)
+                    prefill-bind (io-binding sess)
+                    decode-bind (io-binding sess)
                     onnx-decode-embeds (onnx-tensor mem-info [batch-size 1 hidden-size]
                                                     (buffer decode-embeds) embeds-type)
                     decode-attention-mask-desc (tensor-desc fact neand-fact [batch-size max-seq-len]
@@ -307,9 +307,9 @@
                     decode-position-ids-desc (when position-ids-type
                                                (tensor-desc fact neand-fact
                                                             [batch-size 1] position-ids-type))
-                    decode-position-ids (when position-ids-type
+                    decode-position-ids (when decode-position-ids-desc
                                           (create-tz fact neand-fact decode-position-ids-desc))
-                    onnx-decode-position-ids (when position-ids-type
+                    onnx-decode-position-ids (when decode-position-ids
                                                (onnx-tensor mem-info [batch-size 1]
                                                             (buffer decode-position-ids)
                                                             position-ids-type))
@@ -325,20 +325,21 @@
                     base-tz-b (create-tz fact neand-fact base-tz-desc)
                     a->b (kv-shifter base-tz-a base-tz-b 1)
                     b->a (kv-shifter base-tz-b base-tz-a 1)
-                    kvm-a (contiguous-kv-manager prefill-sess mem-info base-tz-a kv-type
+                    kvm-a (contiguous-kv-manager sess mem-info base-tz-a kv-type
                                                  input-offset output-offset
                                                  batch-size num-heads max-seq-len head-dim)
-                    kvm-b (contiguous-kv-manager prefill-sess mem-info base-tz-b kv-type
+                    kvm-b (contiguous-kv-manager sess mem-info base-tz-b kv-type
                                                  input-offset output-offset
                                                  batch-size num-heads max-seq-len head-dim)
                     kvmans (atom [kvm-a kvm-b 0 a->b b->a])]
-        (transfer! (repeat 1) decode-attention-mask)
         (bind-input! decode-bind embeds-name onnx-decode-embeds)
-        (when decode-position-ids (bind-input! decode-bind position-ids-name onnx-decode-position-ids))
+        (transfer! (repeat (dim decode-attention-mask) 1) decode-attention-mask);;TODO entry! stalls the CPU engine! why???
+        (when decode-position-ids
+          (transfer! (repeat (dim decode-position-ids) 0) decode-position-ids)
+          (bind-input! decode-bind position-ids-name onnx-decode-position-ids))
         (bind-output! decode-bind logits-name onnx-decode-logits)
         (->TextModel mem-info
-                     prefill-sess prefill! prefill-bind
-                     decode-sess decode! decode-bind
+                     sess run-session! prefill-bind decode-bind
                      embeds-name decode-embeds onnx-decode-embeds
                      attention-mask-name decode-attention-mask onnx-decode-attention-mask
                      position-ids-name decode-position-ids onnx-decode-position-ids
@@ -347,18 +348,15 @@
                      attention-shape attention-info)))))
 
 (deftype EmbeddingModel [mem-info
-                         prefill-sess prefill! prefill-bind
-                         decode-sess decode! decode-bind
+                         sess run-session! prefill-bind decode-bind
                          input-ids-name decode-input-ids onnx-decode-input-ids
                          image-features-name onnx-decode-image-features
                          embeds-name decode-embeds onnx-decode-embeds]
   Releaseable
   (release [_]
-    (release prefill-sess)
-    (release prefill!)
+    (release sess)
+    (release run-session!)
     (release prefill-bind)
-    (release decode-sess)
-    (release decode!)
     (release decode-bind)
     (release onnx-decode-input-ids)
     (release onnx-decode-image-features)
@@ -372,36 +370,36 @@
     decode-embeds)
   IFn
   (invoke [_ input-ids image-features embeds!]
-    (let [[batch-size seq-len :as input-ids-shape] (shape input-ids)]
+    (let [[batch-size seq-len :as input-ids-shape] (vec (take 2 (shape input-ids)))]
       (with-release [onnx-input-ids (onnx-tensor mem-info input-ids-shape
                                                  (buffer input-ids) (data-type input-ids))
                      onnx-image-features (if image-features
-                                           (onnx-tensor mem-info (shape image-features)
+                                           (onnx-tensor mem-info (vec (take 3 (shape image-features)))
                                                         (buffer image-features)
                                                         (data-type image-features))
                                            nil)
-                     onnx-embeds (onnx-tensor mem-info (shape embeds!)
+                     onnx-embeds (onnx-tensor mem-info (vec (take 3 (shape embeds!)))
                                               (buffer embeds!) (data-type embeds!))]
         (bind-input! prefill-bind input-ids-name onnx-input-ids)
         (bind-input! prefill-bind image-features-name
                      (or onnx-image-features onnx-decode-image-features))
         (bind-output! prefill-bind embeds-name onnx-embeds)
-        (prefill! prefill-bind)
+        (run-session! prefill-bind)
         embeds!)))
   (invoke [this input-ids embeds!]
     (.invoke this input-ids nil embeds!))
   (invoke [_]
-    (decode! decode-bind)
+    (run-session! decode-bind)
     decode-embeds)
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
 
-(defn embedding-model [fact mem-info prefill-sess decode-sess
+(defn embedding-model [fact mem-info sess
                        [input-ids-name image-features-name]
                        [embeds-name]]
-  (with-release [input-ids-type-info (input-type-info decode-sess 0)
-                 image-features-type-info (input-type-info decode-sess 1)
-                 embeds-type-info (output-type-info decode-sess 0)]
+  (with-release [input-ids-type-info (input-type-info sess 0)
+                 image-features-type-info (input-type-info sess 1)
+                 embeds-type-info (output-type-info sess 0)]
     (let [neand-fact (neanderthal-factory fact)
           input-ids-info (cast-type input-ids-type-info)
           image-features-info (cast-type image-features-type-info)
@@ -410,10 +408,9 @@
           input-ids-type (tensor-type input-ids-info)
           image-features-type (tensor-type image-features-info)
           embeds-type (tensor-type embeds-info)]
-      (let-release [prefill! (runner* prefill-sess)
-                    prefill-bind (io-binding prefill-sess)
-                    decode! (runner* decode-sess)
-                    decode-bind (io-binding decode-sess)
+      (let-release [run-session! (runner* sess)
+                    prefill-bind (io-binding sess)
+                    decode-bind (io-binding sess)
                     decode-input-ids-desc (tensor-desc fact neand-fact [batch-size 1] input-ids-type)
                     decode-input-ids (create-tz fact neand-fact decode-input-ids-desc)
                     onnx-decode-input-ids (onnx-tensor mem-info [batch-size 1]
@@ -431,8 +428,7 @@
         (bind-input! decode-bind image-features-name onnx-decode-image-features)
         (bind-output! decode-bind embeds-name onnx-decode-embeds)
         (->EmbeddingModel mem-info
-                          prefill-sess prefill! prefill-bind
-                          decode-sess decode! decode-bind
+                          sess run-session! prefill-bind decode-bind
                           input-ids-name decode-input-ids onnx-decode-input-ids
                           image-features-name onnx-decode-image-features
                           embeds-name decode-embeds onnx-decode-embeds)))))
