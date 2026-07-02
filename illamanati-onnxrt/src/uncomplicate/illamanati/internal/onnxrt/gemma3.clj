@@ -108,14 +108,15 @@
       (cpu-mem-arena! false)
       (graph-optimization! :all)))
 
-(deftype Gemma3 [fact tokenizer tensor-desc create-tz embedding-model! text-model! sample!
-                 ^long batch-size
-                 position-ids?] ;;TODO rename to model-agnostic name and generalize
+(deftype Gemma3 [fact tokenizer tensor-desc create-tz
+                 mem-info embedding-model! text-model! sample!
+                 ^long batch-size] ;;TODO rename to model-agnostic name and generalize
   Releaseable
   (release [_]
     (release embedding-model!)
     (release text-model!)
-    (release sample!))
+    (release sample!)
+    (release mem-info))
   DiamondFactoryProvider
   (diamond-factory [_]
     fact)
@@ -131,33 +132,53 @@
   (init [this _]
     this)
   IFn
-  (invoke [_ ids arg];;TODO generalize. Reuse common bits so it's easier to support new model types.
+  (invoke [_ prefill-ids arg];;TODO generalize. Reuse common bits so it's easier to support new model types.
     ;;TODO maybe even separate prefill and decode objects in inference...
-    (let [seq-len (if (number? (first ids)) (count ids) (max (map count ids)))
+    (let [seq-len (if (number? (first prefill-ids))
+                    (count prefill-ids)
+                    (max (map count prefill-ids)))
           past-seq-len (long (get (deref (.attention-shape text-model!)) 1));;TODO reflection
           total-seq-len (+ past-seq-len seq-len)
           hidden-size (:hidden-size gemma-3-cpu-default)
-          vocab-size (:vocab-size gemma-3-cpu-default)];;TODO generalize
-      (with-release [input-ids-desc (tensor-desc [batch-size seq-len]
-                                                 (data-type (input embedding-model!)))
-                     input-embeds-desc (tensor-desc [batch-size seq-len hidden-size]
-                                                    (data-type (output embedding-model!)))
-                     prefill-mask-desc (tensor-desc [batch-size total-seq-len]
-                                                    (data-type (.decode-attention-mask text-model!)));;TODO reflection
+          vocab-size (:vocab-size gemma-3-cpu-default)
+          ids-shape [batch-size seq-len]
+          ids-dt (data-type (input embedding-model!))
+          embeds-shape [batch-size seq-len hidden-size]
+          embeds-dt (data-type (output embedding-model!))
+          mask-shape [batch-size total-seq-len]
+          mask-dt (data-type (.decode-attention-mask text-model!));;TODO reflection
+          position-ids-shape [batch-size seq-len]
+          logits-shape [batch-size seq-len vocab-size]
+          logits-dt (data-type (output text-model!))]
+      (with-release [ids-desc (tensor-desc ids-shape ids-dt)
+                     ids (create-tz ids-desc)
+                     onnx-ids (onnx-tensor mem-info ids-shape
+                                           (buffer ids) ids-dt)
+                     embeds-desc (tensor-desc embeds-shape embeds-dt)
+                     embeds (create-tz embeds-desc)
+                     onnx-embeds (onnx-tensor mem-info embeds-shape
+                                              (buffer embeds) embeds-dt)
+                     mask-desc (tensor-desc mask-shape mask-dt)
+                     mask (create-tz mask-desc)
+                     onnx-mask (onnx-tensor mem-info mask-shape (buffer mask) mask-dt)
                      position-ids-desc (when-let [decode-position-ids (.decode-position-ids text-model!)] ;;TODO reflection
-                                         (tensor-desc [batch-size seq-len]
-                                                      (data-type decode-position-ids)))
-                     prefill-logits-desc (tensor-desc [batch-size seq-len vocab-size]
-                                                      (data-type (output text-model!)))
-                     input-ids (create-tz input-ids-desc)
-                     input-embeds! (create-tz input-embeds-desc);;TODO generalize
-                     prefill-mask (create-tz prefill-mask-desc)
+                                         (tensor-desc position-ids-shape (data-type decode-position-ids)))
                      position-ids (when position-ids-desc (create-tz position-ids-desc))
-                     prefill-logits! (create-tz prefill-logits-desc)];;TODO generalize
-        (transfer! ids (view-ge (view-vctr input-ids) seq-len batch-size))
-        (transfer! (repeat (dim prefill-mask) 1) (view-vctr prefill-mask));;TODO entry! seems to fail with integers...
-        (embedding-model! input-ids input-embeds!)
-        (text-model! input-embeds! prefill-mask position-ids prefill-logits!)
+                     onnx-position-ids (when position-ids
+                                         (onnx-tensor mem-info position-ids-shape (buffer position-ids)
+                                                      (data-type position-ids)))
+                     logits-desc (tensor-desc logits-shape logits-dt)
+                     logits (create-tz logits-desc)
+                     onnx-logits (onnx-tensor mem-info logits-shape (buffer logits) logits-dt)
+                     onnx-image-features nil #_(if false
+                                           (onnx-tensor mem-info (vec (take 3 (shape image-features)))
+                                                        (buffer image-features)
+                                                        (data-type image-features))
+                                           nil)]
+        (transfer! prefill-ids (view-ge (view-vctr ids) seq-len batch-size))
+        (entry! (view-vctr mask) 1)
+        (embedding-model! onnx-ids onnx-image-features onnx-embeds)
+        (text-model! embeds onnx-embeds mask onnx-mask position-ids onnx-position-ids logits onnx-logits)
         (sample! arg))))
   (invoke [_ arg]
     (embedding-model!)
@@ -177,31 +198,38 @@
 
 (defn gemma-3-cpu
   ([fact model-path args]
-   (let [{:keys [env batch-size hidden-size vocab-size gemma-3-text gemma-3-embedding
+   (let [{:keys [env batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
                  context-len tokenizer tokenizer-config embedding
                  embedding-inputs embedding-outputs text-inputs text-outputs]
           :or {batch-size 1}
           } (into gemma-3-cpu-default args)
          vect-fact (neanderthal-factory fact)]
-     (let-release [threading-opts (-> (threading-options)
-                                      (denormal-as-zero!)
-                                      (spin-control! true))
-                   universal-opts (universal-options! (options) batch-size)
+     (let-release [;; threading-opts (-> (threading-options)
+                   ;;                    (denormal-as-zero!)
+                   ;;                    (spin-control! true))
+                   embedding-opt (universal-options! (-> (options)
+                                                  ;;       (intra-op-threads! 10)
+                                                         (inter-op-threads! 1))
+                                                     batch-size)
+                   text-opt (universal-options! (-> (options)
+                                                ;;    (intra-op-threads! 10)
+                                                    (inter-op-threads! 1))
+                                                batch-size)
                    tokenizer-constructor (partial hft (format "%s/%s" model-path tokenizer))
-                   text-sess (session env (format "%s/%s" model-path gemma-3-text) universal-opts)
-                   embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding)
-                                                  universal-opts)
+                   embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
+                   text-sess (session env (format "%s/%s" model-path gemma-3-text) text-opt)
                    mem-info (memory-info (device (neanderthal-factory fact :float)) :device 0 :default)
-                   gemma-3-embedding (embedding-model fact mem-info
-                                                      embedding-sess embedding-inputs embedding-outputs)
-                   gemma-3-text (text-model fact mem-info text-sess
+                   gemma-3-embedding (embedding-model fact mem-info embedding-sess embedding-opt
+                                                      embedding-inputs embedding-outputs)
+                   gemma-3-text (text-model fact mem-info text-sess text-opt
                                             text-inputs text-outputs
                                             (output gemma-3-embedding) context-len)
                    sample (argmax-sampler (output gemma-3-text) (input gemma-3-embedding))]
        (->Gemma3 fact tokenizer-constructor
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
+                 mem-info
                  gemma-3-embedding gemma-3-text sample
-                 batch-size false))))
+                 batch-size))))
   ([model-path args]
    (gemma-3-cpu *diamond-factory* model-path args))
   ([model-path]
@@ -210,44 +238,56 @@
 (use 'uncomplicate.snapdragan)
 (use 'uncomplicate.snapdragan.cuda)
 
-(defn gemma-3-gpu
+(defn gemma-3-gpu ;;TODO this should be a protocol that dispatches based on factory!
   ([fact model-path args]
-   (let [{:keys [env batch-size hidden-size vocab-size gemma-3-text gemma-3-embedding
+   (let [{:keys [env batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
                  context-len tokenizer tokenizer-config embedding
                  embedding-inputs embedding-outputs text-inputs text-outputs
                  opts]
           :or {batch-size 1}
           } (into gemma-3-gpu-default args)
          vect-fact (neanderthal-factory fact)]
-     (let-release [threading-opts (-> (threading-options)
-                                      (denormal-as-zero!)
-                                      (spin-control! true))
-                   universal-opts (-> (universal-options! (options) batch-size)
-                                      (intra-op-threads! 1)
-                                      (inter-op-threads! 1)
-                                      (append-provider! :cuda (into opts {:stream (flow fact)}))
-                                      (config! {;; :inter-op-spinning true
-                                                :intra-op-spinning true
-                                                :denormal-as-zero "1"
-                                                :use-ort-model-bytes-directly true
-                                                :use-ort-model-bytes-for-initializers true
-                                                :use-device-allocator-for-initializers true
-                                                :initial-cpu-capacity-bytes 2147483648
-                                                :use-env-allocators true}))
+     (let-release [;; threading-opts (-> (threading-options)
+                   ;;                    (denormal-as-zero!)
+                   ;;                    (spin-control! true))
+                   embedding-opt (-> (universal-options! (options) batch-size)
+                                     (intra-op-threads! 1)
+                                     (inter-op-threads! 1)
+                                     (append-provider! :cuda (into opts {:stream (flow fact)}))
+                                     (config! {;; :inter-op-spinning true
+                                               :intra-op-spinning true
+                                               :denormal-as-zero "1"
+                                               :use-ort-model-bytes-directly true
+                                               :use-ort-model-bytes-for-initializers true
+                                               :use-device-allocator-for-initializers true
+                                               :initial-cpu-capacity-bytes 2147483648
+                                               :use-env-allocators true}))
+                   text-opt (-> (universal-options! (options) batch-size)
+                                (intra-op-threads! 1)
+                                (inter-op-threads! 1)
+                                (append-provider! :cuda (into opts {:stream (flow fact)}))
+                                (config! {;; :inter-op-spinning true
+                                          :intra-op-spinning true
+                                          :denormal-as-zero "1"
+                                          :use-ort-model-bytes-directly true
+                                          :use-ort-model-bytes-for-initializers true
+                                          :use-device-allocator-for-initializers true
+                                          :initial-cpu-capacity-bytes 2147483648
+                                          :use-env-allocators true}))
                    tokenizer-constructor (partial hft (format "%s/%s" model-path tokenizer))
-                   embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding) universal-opts)
-                   text-sess (session env (format "%s/%s" model-path gemma-3-text) universal-opts)
+                   embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
+                   text-sess (session env (format "%s/%s" model-path gemma-3-text) text-opt)
                    mem-info (memory-info (device (neanderthal-factory fact :float)) :device 0 :default)
-                   gemma-3-embedding (embedding-model fact mem-info
-                                                      embedding-sess embedding-inputs embedding-outputs)
-                   gemma-3-text (text-model fact mem-info text-sess
+                   gemma-3-embedding (embedding-model fact mem-info embedding-sess embedding-opt
+                                                      embedding-inputs embedding-outputs)
+                   gemma-3-text (text-model fact mem-info text-sess text-opt
                                             text-inputs text-outputs
                                             (output gemma-3-embedding) context-len)
                    sample (uncomplicate.snapdragan/sampler (.ge-decode-logits gemma-3-text) (view-vctr (input gemma-3-embedding)))];;tODO reflection
        (->Gemma3 fact tokenizer-constructor
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
-                 gemma-3-embedding gemma-3-text sample
-                 batch-size true))))
+                 mem-info gemma-3-embedding gemma-3-text sample
+                 batch-size))))
   ([model-path args]
    (gemma-3-gpu *diamond-factory* model-path args))
   ([model-path]

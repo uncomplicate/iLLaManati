@@ -9,7 +9,7 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.inference
   (:require [uncomplicate.commons
-             [core :refer [let-release with-release Releaseable release Info size sizeof]]
+             [core :refer [let-release with-release Releaseable release Info size sizeof view]]
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer get-entry position! long-pointer put-entry!]]
             [uncomplicate.neanderthal
@@ -177,7 +177,7 @@
        past->present])))
 
 (deftype TextModel [mem-info
-                    sess run-session! prefill-bind decode-bind
+                    sess opt run-session! prefill-bind decode-bind
                     embeds-name decode-embeds onnx-decode-embeds
                     attention-mask-name decode-attention-mask onnx-decode-attention-mask
                     position-ids-name decode-position-ids onnx-decode-position-ids
@@ -187,6 +187,7 @@
   Releaseable
   (release [_]
     (release sess)
+    (release opt)
     (release run-session!)
     (release prefill-bind)
     (release decode-bind)
@@ -198,6 +199,7 @@
     (release decode-attention-mask)
     (release decode-position-ids)
     (release decode-logits)
+    (release ge-decode-logits)
     (release attention-info)
     (run! release (deref kvmans)))
   Transfer
@@ -206,37 +208,27 @@
   (output [_]
     decode-logits)
   IFn
-  (invoke [_ embeds attention-mask position-ids logits!]
-    (let [[_ seq-len :as embeds-shape] (vec (take 3 (shape embeds)))
-          [_ total-seq-len :as attention-mask-shape] (vec (take 3 (shape attention-mask)))
-          [batch-size _ vocab-size :as sub-shape] (vec (take 3 (shape logits!)))
-          batch-data-len (* (long seq-len) (long vocab-size))]
-      (with-release [onnx-embeds (onnx-tensor mem-info embeds-shape (buffer embeds) (data-type embeds))
-                     onnx-attention-mask (onnx-tensor mem-info attention-mask-shape
-                                                      (buffer attention-mask)
-                                                      (data-type attention-mask))
-                     onnx-position-ids (when position-ids
-                                         (onnx-tensor mem-info (vec (take 2 (shape position-ids)))
-                                                      (buffer position-ids)
-                                                      (data-type position-ids)))
-                     onnx-logits (onnx-tensor mem-info sub-shape
-                                              (buffer logits!) (data-type logits!))
-                     last-logits (submatrix (view-ge (view-vctr logits!)
-                                                     batch-data-len
-                                                     batch-size)
-                                            (- batch-data-len (long vocab-size)) 0
-                                            vocab-size batch-size)]
-        (bind-input! prefill-bind embeds-name onnx-embeds)
-        (bind-input! prefill-bind attention-mask-name onnx-attention-mask)
-        (when position-ids
-          (transfer! (cycle batch-size (range (- total-seq-len seq-len) total-seq-len)) position-ids) ;;TODO support rolling kvs; TODO write specialized kernel; TODO generalize
-          (bind-input! prefill-bind position-ids-name onnx-position-ids))
-        (bind-output! prefill-bind logits-name onnx-logits)
-        (swap! kvmans bind-kv prefill-bind seq-len)
-        (swap! attention-shape assoc 1 total-seq-len)
-        (run-session! prefill-bind)
-        (copy! last-logits ge-decode-logits)
-        decode-logits)))
+  (invoke [_ embeds onnx-embeds
+           attention-mask onnx-attention-mask
+           position-ids onnx-position-ids
+           logits onnx-logits]
+    (let [seq-len (long ((shape embeds) 1))
+          total-seq-len (long ((shape attention-mask) 1))
+          [batch-size _ vocab-size :as sub-shape] (shape logits)
+          batch-data-len (* seq-len (long vocab-size))
+          last-logits (submatrix (view-ge (view-vctr logits) batch-data-len batch-size)
+                                 (- batch-data-len (long vocab-size)) 0 vocab-size batch-size)]
+      (bind-input! prefill-bind embeds-name onnx-embeds)
+      (bind-input! prefill-bind attention-mask-name onnx-attention-mask)
+      (when position-ids
+        (transfer! (cycle batch-size (range (- total-seq-len seq-len) total-seq-len)) position-ids) ;;todo support rolling kvs; todo write specialized kernel;
+        (bind-input! prefill-bind position-ids-name onnx-position-ids))
+      (bind-output! prefill-bind logits-name onnx-logits)
+      (swap! kvmans bind-kv prefill-bind seq-len)
+      (swap! attention-shape assoc 1 total-seq-len)
+      (run-session! prefill-bind)
+      (copy! last-logits ge-decode-logits)
+      decode-logits))
   (invoke [this embeds attention-mask logits!]
     (.invoke this embeds attention-mask nil logits!))
   (invoke [_]
@@ -245,18 +237,17 @@
                                            (inc x))))
     (with-release [mask-view (onnx-tensor mem-info (deref attention-shape)
                                           (buffer decode-attention-mask)
-                                          (data-type decode-attention-mask))]
+                                          (data-type decode-attention-mask))];;TODO check whether this needs synchronization in CUDA
       (bind-input! decode-bind attention-mask-name mask-view)
       (when decode-position-ids
-        (transfer! (repeat (dim decode-position-ids) (get (deref kvmans) 2))
-                   decode-position-ids));;TODO until entry! is supported, use transfer!
+        (entry! (view-vctr decode-position-ids) (get (deref kvmans) 2)))
       (swap! kvmans bind-kv decode-bind 1)
       (run-session! decode-bind)
       decode-logits))
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
 
-(defn text-model [fact mem-info sess
+(defn text-model [fact mem-info sess opt
                   [embeds-name attention-mask-name position-ids-name :as input-names]
                   [logits-name :as output-names]
                   decode-embeds
@@ -331,30 +322,30 @@
                     kvm-b (contiguous-kv-manager sess mem-info base-tz-b kv-type
                                                  input-offset output-offset
                                                  batch-size num-heads max-seq-len head-dim)
-                    kvmans (atom [kvm-a kvm-b 0 a->b b->a])]
+                   kvmans (atom [kvm-a kvm-b 0 a->b b->a])]
         (bind-input! decode-bind embeds-name onnx-decode-embeds)
-        (transfer! (repeat (dim decode-attention-mask) 1) decode-attention-mask);;TODO entry! stalls the CPU engine! why???
+        (entry! (view-vctr decode-attention-mask) 1)
         (when decode-position-ids
-          (transfer! (repeat (dim decode-position-ids) 0) decode-position-ids)
+          (entry! (view-vctr decode-position-ids) 0)
           (bind-input! decode-bind position-ids-name onnx-decode-position-ids))
         (bind-output! decode-bind logits-name onnx-decode-logits)
-        (->TextModel mem-info
-                     sess run-session! prefill-bind decode-bind
-                     embeds-name decode-embeds onnx-decode-embeds
+        nil
+        (->TextModel mem-info sess opt run-session! prefill-bind decode-bind
+                     embeds-name (view decode-embeds) onnx-decode-embeds
                      attention-mask-name decode-attention-mask onnx-decode-attention-mask
                      position-ids-name decode-position-ids onnx-decode-position-ids
                      logits-name decode-logits onnx-decode-logits ge-decode-logits
                      kvmans (if decode-position-ids bind-kv-sliding! bind-kv-linear!)
                      attention-shape attention-info)))))
 
-(deftype EmbeddingModel [mem-info
-                         sess run-session! prefill-bind decode-bind
+(deftype EmbeddingModel [mem-info sess opt run-session! prefill-bind decode-bind
                          input-ids-name decode-input-ids onnx-decode-input-ids
                          image-features-name onnx-decode-image-features
                          embeds-name decode-embeds onnx-decode-embeds]
   Releaseable
   (release [_]
     (release sess)
+    (release opt)
     (release run-session!)
     (release prefill-bind)
     (release decode-bind)
@@ -369,23 +360,13 @@
   (output [_]
     decode-embeds)
   IFn
-  (invoke [_ input-ids image-features embeds!]
-    (let [[batch-size seq-len :as input-ids-shape] (vec (take 2 (shape input-ids)))]
-      (with-release [onnx-input-ids (onnx-tensor mem-info input-ids-shape
-                                                 (buffer input-ids) (data-type input-ids))
-                     onnx-image-features (if image-features
-                                           (onnx-tensor mem-info (vec (take 3 (shape image-features)))
-                                                        (buffer image-features)
-                                                        (data-type image-features))
-                                           nil)
-                     onnx-embeds (onnx-tensor mem-info (vec (take 3 (shape embeds!)))
-                                              (buffer embeds!) (data-type embeds!))]
-        (bind-input! prefill-bind input-ids-name onnx-input-ids)
-        (bind-input! prefill-bind image-features-name
-                     (or onnx-image-features onnx-decode-image-features))
-        (bind-output! prefill-bind embeds-name onnx-embeds)
-        (run-session! prefill-bind)
-        embeds!)))
+  (invoke [this onnx-input-ids onnx-image-features onnx-embeds]
+    (bind-input! prefill-bind input-ids-name onnx-input-ids)
+    (bind-input! prefill-bind image-features-name
+                 (or onnx-image-features onnx-decode-image-features))
+    (bind-output! prefill-bind embeds-name onnx-embeds)
+    (run-session! prefill-bind)
+    this)
   (invoke [this input-ids embeds!]
     (.invoke this input-ids nil embeds!))
   (invoke [_]
@@ -394,7 +375,7 @@
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
 
-(defn embedding-model [fact mem-info sess
+(defn embedding-model [fact mem-info sess opt
                        [input-ids-name image-features-name]
                        [embeds-name]]
   (with-release [input-ids-type-info (input-type-info sess 0)
@@ -427,8 +408,7 @@
         (bind-input! decode-bind input-ids-name onnx-decode-input-ids)
         (bind-input! decode-bind image-features-name onnx-decode-image-features)
         (bind-output! decode-bind embeds-name onnx-decode-embeds)
-        (->EmbeddingModel mem-info
-                          sess run-session! prefill-bind decode-bind
+        (->EmbeddingModel mem-info sess opt run-session! prefill-bind decode-bind
                           input-ids-name decode-input-ids onnx-decode-input-ids
                           image-features-name onnx-decode-image-features
                           embeds-name decode-embeds onnx-decode-embeds)))))

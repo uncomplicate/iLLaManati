@@ -42,6 +42,8 @@
   :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=true"
                        "--enable-native-access=ALL-UNNAMED"]
 
+  :javac-options ["--release" "21" "-Xlint:-options"]
+
   ;; :global-vars {*warn-on-reflection* true
   ;;               *assert* false
   ;;               *unchecked-math* :warn-on-boxed

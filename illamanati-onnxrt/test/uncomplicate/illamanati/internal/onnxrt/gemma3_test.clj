@@ -11,25 +11,20 @@
   (:require [midje.sweet :refer [facts =>]]
             [uncomplicate.commons [core :refer [with-release]]]
             [uncomplicate.neanderthal.core :refer [transfer! entry]]
-            [uncomplicate.diamond.tensor :refer [input]]
-            [uncomplicate.diamond.internal.dnnl.factory :refer [dnnl-factory]]
+            [uncomplicate.diamond.native :refer []]
             [uncomplicate.diamond.internal.onnxrt.core :refer [environment telemetry!]]
             [uncomplicate.illamanati.tokenizer :refer [tokenizer encode decoder ids]]
             [uncomplicate.illamanati.internal.onnxrt.gemma3 :refer [gemma-3-cpu]]))
 
-(with-release [fact (dnnl-factory)
-               model-path "../data/Gemma-3-ONNX/gemma-3-4b-it"
+(with-release [model-path "../data/Gemma-3-ONNX/gemma-3-4b-it"
                text-input "Belgrade is the capital"
-               env (telemetry! (environment :verbose (name (gensym "illamanati_onnxrt_")) #_{:inter-op-threads 1
-                                                                                             :intra-op-threads 8
-                                                                                             :denormal-as-zero true
-                                                                                             :spin true}))
-               gemma-3! (gemma-3-cpu fact model-path {:env env
-                                                      :context-len 12
-                                                      :batch-size 1})
+               env (telemetry! (environment :verbose (name (gensym "illamanati_onnxrt_"))))
+               gemma-3! (gemma-3-cpu model-path {:env env
+                                                 :context-len 12
+                                                 :batch-size 1})
                gemma-3-tokenizer (tokenizer gemma-3!)
-               encoding (encode gemma-3-tokenizer text-input)
-               st (decoder gemma-3-tokenizer)]
+               encoding (encode gemma-3-tokenizer text-input);;TODO this could be function (gemma-3-tokenizer text-input) => encode
+               st (decoder gemma-3-tokenizer)] ;;TODO (gemma-3-tokenizer) => gives the decoder
   (facts
     "ONNX Gemma3 inference test."
     (println "----------------- prefill starts ------------------")
