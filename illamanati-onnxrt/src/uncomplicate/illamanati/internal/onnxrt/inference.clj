@@ -241,7 +241,7 @@
                                            (inc x))))
     (with-release [mask-view (onnx-tensor mem-info (deref attention-shape)
                                           (buffer decode-attention-mask)
-                                          (data-type decode-attention-mask))];;TODO check whether this needs synchronization in CUDA
+                                          (data-type decode-attention-mask))]
       (bind-input! decode-bind attention-mask-name mask-view)
       (when decode-position-ids
         (entry! (view-vctr decode-position-ids) (get (deref kvmans) 2)))
@@ -299,7 +299,7 @@
                                                      (buffer decode-embeds) embeds-type)
                      decode-attention-mask-desc (tensor-desc fact neand-fact [batch-size max-seq-len]
                                                              attention-mask-type)
-                     decode-attention-mask (create-tz fact neand-fact decode-attention-mask-desc true)
+                     decode-attention-mask (create-tz fact neand-fact decode-attention-mask-desc)
                      onnx-decode-attention-mask (onnx-tensor mem-info [batch-size max-seq-len]
                                                              (buffer decode-attention-mask)
                                                              attention-mask-type)
@@ -307,20 +307,20 @@
                                                 (tensor-desc fact neand-fact
                                                              [batch-size 1] position-ids-type))
                      decode-position-ids (when decode-position-ids-desc
-                                           (create-tz fact neand-fact decode-position-ids-desc true))
+                                           (create-tz fact neand-fact decode-position-ids-desc))
                      onnx-decode-position-ids (when decode-position-ids
                                                 (onnx-tensor mem-info [batch-size 1]
                                                              (buffer decode-position-ids)
                                                              position-ids-type))
                      decode-logits-desc (tensor-desc fact neand-fact [batch-size 1 vocab-size]
                                                      logits-type)
-                     decode-logits (create-tz fact neand-fact decode-logits-desc true)
+                     decode-logits (create-tz fact neand-fact decode-logits-desc)
                      onnx-decode-logits (onnx-tensor mem-info [batch-size 1 vocab-size]
                                                      (buffer decode-logits) logits-type)
                      ge-decode-logits (view-ge (view-vctr decode-logits) vocab-size batch-size)
                      base-tz-desc (tensor-desc fact neand-fact kv-5d-shape kv-type kv-5d-strides)
-                     base-tz-a (create-tz fact neand-fact base-tz-desc true)
-                     base-tz-b (create-tz fact neand-fact base-tz-desc true)
+                     base-tz-a (create-tz fact neand-fact base-tz-desc)
+                     base-tz-b (create-tz fact neand-fact base-tz-desc)
                      a->b (when decode-position-ids (kv-shifter base-tz-a base-tz-b 1))
                      b->a (when decode-position-ids (kv-shifter base-tz-b base-tz-a 1))
                      kvm-a (contiguous-kv-manager sess mem-info base-tz-a kv-type
@@ -409,17 +409,17 @@
                      prefill-bind (io-binding sess)
                      decode-bind (io-binding sess)
                      decode-input-ids-desc (tensor-desc fact neand-fact [batch-size 1] input-ids-type)
-                     decode-input-ids (create-tz fact neand-fact decode-input-ids-desc true)
+                     decode-input-ids (create-tz fact neand-fact decode-input-ids-desc)
                      onnx-decode-input-ids (onnx-tensor mem-info [batch-size 1]
                                                         (buffer decode-input-ids) input-ids-type)
                      decode-embeds-desc (tensor-desc fact neand-fact [batch-size 1 hidden-size]
                                                      embeds-type)
-                     decode-embeds (create-tz fact neand-fact decode-embeds-desc true)
+                     decode-embeds (create-tz fact neand-fact decode-embeds-desc)
                      onnx-decode-embeds (onnx-tensor mem-info [batch-size 1 hidden-size]
                                                      (buffer decode-embeds) embeds-type)
                      image-features-desc (tensor-desc fact neand-fact
                                                       [0 0 hidden-size] image-features-type)
-                     decode-image-features (create-tz fact neand-fact image-features-desc true)
+                     decode-image-features (create-tz fact neand-fact image-features-desc)
                      onnx-decode-image-features (onnx-tensor mem-info [0 0 hidden-size]
                                                              (buffer decode-image-features)
                                                              image-features-type)]

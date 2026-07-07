@@ -119,11 +119,10 @@
                                                    ["inputs_embeds"])
                gemma-3-text! (text-model mem-info sess-text opt-text
                                          ["inputs_embeds" "attention_mask"]
-                                         ["logits"] (view (output gemma-3-embedding!)) 12)
+                                         ["logits"] (output gemma-3-embedding!) 12)
                sample! (argmax-sampler (output gemma-3-text!) (input gemma-3-embedding!))]
   (facts
    "ONNX Gemma3 embedding test."
-   (sample! 1.0) => [0]
    (transfer! [2 19727 9619 563 506 5279] (view-vctr input-ids))
    (gemma-3-embedding! onnx-input-ids onnx-image-features onnx-embeds)
    (count (filter pos? (view-vctr embeds))) => 7649

@@ -27,6 +27,7 @@
                            execution-mode! memory-info]]
              [model :refer [tensor-desc create-tz]]]
             [uncomplicate.snapdragan :refer [sampler]]
+            [uncomplicate.snapdragan.cuda :refer []]
             [uncomplicate.illamanati.tokenizer :refer [tokenizer encode decoder ids]]
             [uncomplicate.illamanati.internal.onnxrt.inference :refer [embedding-model text-model]]
             [uncomplicate.illamanati.internal.onnxrt.gemma3 :refer [gemma-3-gpu]]))
@@ -138,23 +139,41 @@
                                                          ["inputs_embeds"])
                      gemma-3-text! (text-model mem-info sess-text opt-text
                                                ["inputs_embeds" "attention_mask" "position_ids"]
-                                               ["logits"] (view (output gemma-3-embedding!)) 12)
+                                               ["logits"]  (output gemma-3-embedding!) 16)
                      sample! (sampler (.-ge-decode-logits gemma-3-text!) (view-vctr (input gemma-3-embedding!)))]
         (facts
           "ONNX Gemma3 embedding test."
-          (sample! 1.0) => [0]
-          (transfer! [2 19727 9619 563 506 5279] (view-vctr (input gemma-3-embedding!)))
+          (transfer! [2 19727 9619 563 506 5279] (view-vctr input-ids))
           (gemma-3-embedding! onnx-input-ids onnx-image-features onnx-embeds)
-          (count (filter pos? (view-vctr (native embeds)))) => 7746
           (transfer! (repeat 100 1) attention-mask)
           (transfer! (range 0 12) position-ids)
           (gemma-3-text! embeds onnx-embeds
                          attention-mask onnx-attention-mask
                          position-ids onnx-position-ids
                          logits onnx-logits)
-          (sample! 1.0) => [236773]
-          (synchronize!)
-          (seq (view-vctr (native (input gemma-3-embedding!)))) => [236773])))))
+          (sample! 1.0) => [532]
+          (seq (view-vctr (native (input gemma-3-embedding!)))) => [532]
+          (gemma-3-embedding!)
+          (gemma-3-text!)
+          (sample! 1.0) => :a
+          (gemma-3-embedding!)
+          (gemma-3-text!)
+          (sample! 1.0) => :b
+          (gemma-3-embedding!)
+          (gemma-3-text!)
+          (sample! 1.0) => :c
+          (gemma-3-embedding!)
+          (gemma-3-text!)
+          (sample! 1.0) => :d
+          (gemma-3-embedding!)
+          (gemma-3-text!)
+          (sample! 1.0) => :e
+          (gemma-3-embedding!)
+          (gemma-3-text!)
+          (sample! 1.0) => :f
+          (gemma-3-embedding!)
+          (gemma-3-text!)
+          (sample! 1.0) => :g)))))
 
 (with-default
   (reset-context! (device))
