@@ -9,7 +9,8 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.gemma3
   (:require [uncomplicate.commons
-             [core :refer [let-release with-release Releaseable release Info size sizeof releaseable]]
+             [core :refer [let-release with-release Releaseable release Info size sizeof
+                           releaseable view]]
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer get-entry position! long-pointer put-entry!]]
             [uncomplicate.neanderthal
@@ -34,7 +35,7 @@
             [uncomplicate.illamanati.internal.onnxrt.inference :refer [text-model embedding-model]]
             [uncomplicate.illamanati.tokenizer :refer [TokenizerProvider]]
             [uncomplicate.illamanati.internal.huggingface.tokenizer-fast :refer [hft]])
-  (:import [clojure.lang IFn AFn]));;TODO tidy up
+  (:import [clojure.lang IFn AFn]))
 
 (def gemma-3-cpu-default {:hidden-size 2560
                           :vocab-size 262208
@@ -61,9 +62,8 @@
                           :text-inputs ["inputs_embeds" "attention_mask" "position_ids"]
                           :text-outputs ["logits"]
                           :opts {:device-id 0
-                                 :copy-in-default-stream true
+                                 ;;:copy-in-default-stream true
                                  ;;:conv-algo-search :exhaustive ;;TODO
-                                 ;;:conv-use-max-workspace true
                                  :conv-use-max-workspace false
                                  :enable-cuda-graph false
                                  :conv1d-pad-to-nc1d false
@@ -72,21 +72,19 @@
                                  :tunable-op-max-tuning-duration-ms 0
                                  :skip-layer-norm-strict-mode false
                                  :prefer-nhwc false
-                                 :use-ep-level-unified-stream false
                                  :ep-level-unified-stream false
                                  :tf32 true
                                  :fuse-conv-bias false
                                  :sdpa-kernel false
-                                 :arena-extend-strategy :requested}
-                          })
+                                 :arena-extend-strategy :requested}})
 
-(defn prefill-options!
-  ([opt! batch-size]
-   (-> opt!
-       (execution-mode! :sequential)
-       (override-dimension! "batch_size" batch-size)
-       (cpu-mem-arena! false)
-       (graph-optimization! :all))))
+#_(defn prefill-options!
+    ([opt! batch-size]
+     (-> opt!
+         (execution-mode! :sequential)
+         (override-dimension! "batch_size" batch-size)
+         (cpu-mem-arena! false)
+         (graph-optimization! :all))))
 
 (defn universal-options!
   ([opt! batch-size]
@@ -98,23 +96,23 @@
        (override-dimension! "image_length" 0)
        (graph-optimization! :all))))
 
-(defn decode-options! [opt! batch-size]
-  (-> opt!
-      (execution-mode! :sequential)
-      (override-dimension! "batch_size" batch-size)
-      (override-dimension! "sequence_length" 1)
-      (override-dimension! "num_images" 0)
-      (override-dimension! "image_length" 0)
-      (cpu-mem-arena! false)
-      (graph-optimization! :all)))
+#_(defn decode-options! [opt! batch-size]
+    (-> opt!
+        (execution-mode! :sequential)
+        (override-dimension! "batch_size" batch-size)
+        (override-dimension! "sequence_length" 1)
+        (override-dimension! "num_images" 0)
+        (override-dimension! "image_length" 0)
+        (cpu-mem-arena! false)
+        (graph-optimization! :all)))
 
 (deftype Gemma3 [fact tokenizer tensor-desc create-tz
                  mem-info embedding-model! text-model! sample!
                  ^long batch-size] ;;TODO rename to model-agnostic name and generalize
   Releaseable
   (release [_]
-    (release embedding-model!)
     (release text-model!)
+    (release embedding-model!)
     (release sample!)
     (release mem-info))
   DiamondFactoryProvider
@@ -139,51 +137,53 @@
                     (max (map count prefill-ids)))
           past-seq-len (long (get (deref (.attention-shape text-model!)) 1));;TODO reflection
           total-seq-len (+ past-seq-len seq-len)
-          hidden-size (:hidden-size gemma-3-cpu-default)
-          vocab-size (:vocab-size gemma-3-cpu-default)
+          hidden-size (:hidden-size gemma-3-cpu-default);;TODO generalize cpu/gpu
+          vocab-size (:vocab-size gemma-3-cpu-default);;TODO generalize cpu/gpu
           ids-shape [batch-size seq-len]
           ids-dt (data-type (input embedding-model!))
+          image-features-shape [0 0 hidden-size]
+          image-features-dt (data-type (.-decode-image-features embedding-model!));;TODO reflection
           embeds-shape [batch-size seq-len hidden-size]
           embeds-dt (data-type (output embedding-model!))
           mask-shape [batch-size total-seq-len]
-          mask-dt (data-type (.decode-attention-mask text-model!));;TODO reflection
+          mask-dt (data-type (.-decode-attention-mask text-model!));;TODO reflection
           position-ids-shape [batch-size seq-len]
           logits-shape [batch-size seq-len vocab-size]
           logits-dt (data-type (output text-model!))]
       (with-release [ids-desc (tensor-desc ids-shape ids-dt)
                      ids (create-tz ids-desc)
-                     onnx-ids (onnx-tensor mem-info ids-shape
-                                           (buffer ids) ids-dt)
+                     onnx-ids (onnx-tensor mem-info ids-shape (buffer ids) ids-dt)
                      embeds-desc (tensor-desc embeds-shape embeds-dt)
                      embeds (create-tz embeds-desc)
-                     onnx-embeds (onnx-tensor mem-info embeds-shape
-                                              (buffer embeds) embeds-dt)
+                     onnx-embeds (onnx-tensor mem-info embeds-shape (buffer embeds) embeds-dt)
                      mask-desc (tensor-desc mask-shape mask-dt)
-                     mask (create-tz mask-desc)
+                     mask (create-tz mask-desc true)
                      onnx-mask (onnx-tensor mem-info mask-shape (buffer mask) mask-dt)
                      position-ids-desc (when-let [decode-position-ids (.decode-position-ids text-model!)] ;;TODO reflection
                                          (tensor-desc position-ids-shape (data-type decode-position-ids)))
-                     position-ids (when position-ids-desc (create-tz position-ids-desc))
+                     position-ids (when position-ids-desc (create-tz position-ids-desc true))
                      onnx-position-ids (when position-ids
                                          (onnx-tensor mem-info position-ids-shape (buffer position-ids)
                                                       (data-type position-ids)))
                      logits-desc (tensor-desc logits-shape logits-dt)
                      logits (create-tz logits-desc)
                      onnx-logits (onnx-tensor mem-info logits-shape (buffer logits) logits-dt)
-                     onnx-image-features nil #_(if false
-                                           (onnx-tensor mem-info (vec (take 3 (shape image-features)))
-                                                        (buffer image-features)
-                                                        (data-type image-features))
-                                           nil)]
+                     image-features-desc (tensor-desc image-features-shape image-features-dt)
+                     image-features (create-tz image-features-desc)
+                     onnx-image-features (onnx-tensor mem-info [0 0 hidden-size]
+                                                      (buffer image-features)
+                                                      image-features-dt)]
         (transfer! prefill-ids (view-ge (view-vctr ids) seq-len batch-size))
-        (entry! (view-vctr mask) 1)
         (embedding-model! onnx-ids onnx-image-features onnx-embeds)
+        (entry! (view-vctr mask) 1)
         (text-model! embeds onnx-embeds mask onnx-mask position-ids onnx-position-ids logits onnx-logits)
         (sample! arg))))
   (invoke [_ arg]
     (embedding-model!)
     (text-model!)
-    (sample! arg)))
+    (sample! arg))
+  (applyTo [this xs]
+    (AFn/applyToHelper this xs)))
 
 (defn argmax-sampler [logits input-ids!];; TODO ATM just a naive placeholder. Use snapdragan later. Use floats, and convert non-floats to floats. Use connector for easy if-needed transformations.
   (let [[batch-size seq-size vocab-size] (shape logits)]
@@ -208,11 +208,11 @@
                    ;;                    (denormal-as-zero!)
                    ;;                    (spin-control! true))
                    embedding-opt (universal-options! (-> (options)
-                                                  ;;       (intra-op-threads! 10)
+                                                         (intra-op-threads! 10)
                                                          (inter-op-threads! 1))
                                                      batch-size)
                    text-opt (universal-options! (-> (options)
-                                                ;;    (intra-op-threads! 10)
+                                                    (intra-op-threads! 10)
                                                     (inter-op-threads! 1))
                                                 batch-size)
                    tokenizer-constructor (partial hft (format "%s/%s" model-path tokenizer))
@@ -251,8 +251,8 @@
                    ;;                    (denormal-as-zero!)
                    ;;                    (spin-control! true))
                    embedding-opt (-> (universal-options! (options) batch-size)
-                                     (intra-op-threads! 1)
-                                     (inter-op-threads! 1)
+                                     ;; (intra-op-threads! 1)
+                                     ;; (inter-op-threads! 1)
                                      (append-provider! :cuda (into opts {:stream (flow fact)}))
                                      (config! {;; :inter-op-spinning true
                                                :intra-op-spinning true
@@ -263,8 +263,8 @@
                                                :initial-cpu-capacity-bytes 2147483648
                                                :use-env-allocators true}))
                    text-opt (-> (universal-options! (options) batch-size)
-                                (intra-op-threads! 1)
-                                (inter-op-threads! 1)
+                                ;; (intra-op-threads! 1)
+                                ;; (inter-op-threads! 1)
                                 (append-provider! :cuda (into opts {:stream (flow fact)}))
                                 (config! {;; :inter-op-spinning true
                                           :intra-op-spinning true

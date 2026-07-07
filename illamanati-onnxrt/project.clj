@@ -9,13 +9,11 @@
                  ;; which then might clash with the versions that you project includes.
                  ;; If you want to try the Hello World without AOT, just comment out the uncomplicate/deep-diamond
                  ;; dependency!
-                 [uncomplicate/commons "0.22.0"]
-                 [uncomplicate/deep-diamond "0.45.0"]
+                 [org.uncomplicate/neanderthal-base "0.63.0"]
+                 [org.uncomplicate/deep-diamond-base "0.45.0"]
                  [org.uncomplicate/deep-diamond-dnnl "0.45.0"]
-                 [org.uncomplicate/diamond-onnxrt "0.25.0-SNAPSHOT"]
-                 [org.uncomplicate/illamanati-tokenizer "0.1.0-SNAPSHOT"]
-                 [org.bytedeco/opencl-platform "3.0-1.5.13"];;TODO remove
-                 [org.uncomplicate/neanderthal-cuda "0.64.0-SNAPSHOT"]]
+                 [org.uncomplicate/diamond-onnxrt "0.26.0-SNAPSHOT"]
+                 [org.uncomplicate/illamanati-tokenizer "0.1.0-SNAPSHOT"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
@@ -32,23 +30,23 @@
              :linux {:dependencies [[org.bytedeco/onnxruntime-platform-gpu "1.26.0-1.5.14-SNAPSHOT"]
                                     [org.uncomplicate/neanderthal-mkl "0.63.0"]
                                     [org.bytedeco/mkl "2025.3-1.5.13" :classifier "linux-x86_64-redist"]
-                                    [uncomplicate/clojurecuda "0.29.0"]
-                                    [org.uncomplicate/deep-diamond-cuda "0.45.1-SNAPSHOT"]
+                                    [org.uncomplicate/deep-diamond-cuda "0.46.0-SNAPSHOT"]
+                                    [org.uncomplicate/snapdragan-cuda "0.4.0-SNAPSHOT"]
                                     [org.bytedeco/cuda-platform "13.2-9.21-1.5.14-SNAPSHOT"]
                                     [org.bytedeco/cuda-redist "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-cublas "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
-                                    #_[org.bytedeco/cuda-redist-cudnn "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
+                                    [org.bytedeco/cuda-redist-cudnn "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-nccl "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
-                                    [org.uncomplicate/snapdragan-cuda "0.1.0-SNAPSHOT"]]}
+                                    ]}
              :windows {:dependencies [[org.bytedeco/onnxruntime-platform-gpu "1.26.0-1.5.14-SNAPSHOT"]
                                       [org.uncomplicate/neanderthal-mkl "0.63.0"]
                                       [org.bytedeco/mkl "2025.3-1.5.13" :classifier "windows-x86_64-redist"]
-                                      [org.uncomplicate/deep-diamond-cuda "0.45.0"]
+                                      [org.uncomplicate/deep-diamond-cuda "0.46.0"]
                                       [org.bytedeco/cuda-redist "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
                                       [org.bytedeco/cuda-redist-cublas "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
                                       [org.bytedeco/cuda-redist-cudnn "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
                                       [org.bytedeco/cuda-redist-nccl "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
-                                      [org.uncomplicate/snapdragan-cuda "0.1.0-SNAPSHOT"]]}
+                                      [org.uncomplicate/snapdragan-cuda "0.2.0-SNAPSHOT"]]}
              :macosx {:dependencies [[org.uncomplicate/neanderthal-accelerate "0.63.0"]
                                      [org.bytedeco/openblas "0.3.31-1.5.13" :classifier "macosx-arm64"]]}}
 
