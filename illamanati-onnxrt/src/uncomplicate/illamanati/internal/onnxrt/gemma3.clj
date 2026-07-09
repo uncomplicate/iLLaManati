@@ -34,7 +34,9 @@
              [model :refer [create-tz tensor-desc]]]
             [uncomplicate.illamanati.internal.onnxrt.inference :refer [text-model embedding-model]]
             [uncomplicate.illamanati.tokenizer :refer [TokenizerProvider]]
-            [uncomplicate.illamanati.internal.huggingface.tokenizer-fast :refer [hft]])
+            [uncomplicate.illamanati.internal.huggingface.tokenizer-fast :refer [hft]]
+            [uncomplicate.snapdragan :refer [sampler]]
+            [uncomplicate.snapdragan.cuda :refer []])
   (:import [clojure.lang IFn AFn]))
 
 (def gemma-3-cpu-default {:hidden-size 2560
@@ -62,7 +64,7 @@
                           :text-inputs ["inputs_embeds" "attention_mask" "position_ids"]
                           :text-outputs ["logits"]
                           :opts {:device-id 0
-                                 ;;:copy-in-default-stream true
+                                 :copy-in-default-stream true
                                  ;;:conv-algo-search :exhaustive ;;TODO
                                  :conv-use-max-workspace false
                                  :enable-cuda-graph false
@@ -73,18 +75,11 @@
                                  :skip-layer-norm-strict-mode false
                                  :prefer-nhwc false
                                  :ep-level-unified-stream false
-                                 :tf32 true
+                                 ;;:tf32 true
+                                 :tf32 false
                                  :fuse-conv-bias false
                                  :sdpa-kernel false
                                  :arena-extend-strategy :requested}})
-
-#_(defn prefill-options!
-    ([opt! batch-size]
-     (-> opt!
-         (execution-mode! :sequential)
-         (override-dimension! "batch_size" batch-size)
-         (cpu-mem-arena! false)
-         (graph-optimization! :all))))
 
 (defn universal-options!
   ([opt! batch-size]
@@ -96,17 +91,7 @@
        (override-dimension! "image_length" 0)
        (graph-optimization! :all))))
 
-#_(defn decode-options! [opt! batch-size]
-    (-> opt!
-        (execution-mode! :sequential)
-        (override-dimension! "batch_size" batch-size)
-        (override-dimension! "sequence_length" 1)
-        (override-dimension! "num_images" 0)
-        (override-dimension! "image_length" 0)
-        (cpu-mem-arena! false)
-        (graph-optimization! :all)))
-
-(deftype Gemma3 [fact tokenizer tensor-desc create-tz
+(deftype Gemma3 [fact tensor-desc create-tz
                  mem-info embedding-model! text-model! sample!
                  ^long batch-size] ;;TODO rename to model-agnostic name and generalize
   Releaseable
@@ -118,9 +103,6 @@
   DiamondFactoryProvider
   (diamond-factory [_]
     fact)
-  TokenizerProvider
-  (tokenizer [_]
-    (tokenizer))
   Transfer
   (input [_]
     (input embedding-model!))
@@ -142,7 +124,7 @@
           ids-shape [batch-size seq-len]
           ids-dt (data-type (input embedding-model!))
           image-features-shape [0 0 hidden-size]
-          image-features-dt (data-type (.-decode-image-features embedding-model!));;TODO reflection
+          image-features-dt(data-type (.-decode-image-features embedding-model!));;TODO reflection
           embeds-shape [batch-size seq-len hidden-size]
           embeds-dt (data-type (output embedding-model!))
           mask-shape [batch-size total-seq-len]
@@ -157,11 +139,11 @@
                      embeds (create-tz embeds-desc)
                      onnx-embeds (onnx-tensor mem-info embeds-shape (buffer embeds) embeds-dt)
                      mask-desc (tensor-desc mask-shape mask-dt)
-                     mask (create-tz mask-desc true)
+                     mask (create-tz mask-desc)
                      onnx-mask (onnx-tensor mem-info mask-shape (buffer mask) mask-dt)
                      position-ids-desc (when-let [decode-position-ids (.decode-position-ids text-model!)] ;;TODO reflection
                                          (tensor-desc position-ids-shape (data-type decode-position-ids)))
-                     position-ids (when position-ids-desc (create-tz position-ids-desc true))
+                     position-ids (when position-ids-desc (create-tz position-ids-desc))
                      onnx-position-ids (when position-ids
                                          (onnx-tensor mem-info position-ids-shape (buffer position-ids)
                                                       (data-type position-ids)))
@@ -170,14 +152,16 @@
                      onnx-logits (onnx-tensor mem-info logits-shape (buffer logits) logits-dt)
                      image-features-desc (tensor-desc image-features-shape image-features-dt)
                      image-features (create-tz image-features-desc)
-                     onnx-image-features (onnx-tensor mem-info [0 0 hidden-size]
+                     onnx-image-features (onnx-tensor mem-info image-features-shape
                                                       (buffer image-features)
                                                       image-features-dt)]
         (transfer! prefill-ids (view-ge (view-vctr ids) seq-len batch-size))
         (embedding-model! onnx-ids onnx-image-features onnx-embeds)
         (entry! (view-vctr mask) 1)
         (text-model! embeds onnx-embeds mask onnx-mask position-ids onnx-position-ids logits onnx-logits)
-        (sample! arg))))
+        (let [res (sample! arg)]
+          (uncomplicate.clojurecuda.core/synchronize! (flow fact))
+          res))))
   (invoke [_ arg]
     (embedding-model!)
     (text-model!)
@@ -196,10 +180,13 @@
       (dragan-says-ex "This sampler is intended to sample the last token of a contiguous tensor, not the whole history."
                       {:seq-size seq-size}))))
 
+(defn gemma-3-tokenizer [model-path]
+  (hft (format "%s/%s" model-path (:tokenizer gemma-3-cpu-default))))
+
 (defn gemma-3-cpu
   ([fact model-path args]
    (let [{:keys [env batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
-                 context-len tokenizer tokenizer-config embedding
+                 context-len embedding
                  embedding-inputs embedding-outputs text-inputs text-outputs]
           :or {batch-size 1}
           } (into gemma-3-cpu-default args)
@@ -215,7 +202,6 @@
                                                     (intra-op-threads! 10)
                                                     (inter-op-threads! 1))
                                                 batch-size)
-                   tokenizer-constructor (partial hft (format "%s/%s" model-path tokenizer))
                    embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
                    text-sess (session env (format "%s/%s" model-path gemma-3-text) text-opt)
                    mem-info (memory-info (device (neanderthal-factory fact :float)) :device 0 :default)
@@ -225,7 +211,7 @@
                                             text-inputs text-outputs
                                             (output gemma-3-embedding) context-len)
                    sample (argmax-sampler (output gemma-3-text) (input gemma-3-embedding))]
-       (->Gemma3 fact tokenizer-constructor
+       (->Gemma3 fact
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
                  mem-info
                  gemma-3-embedding gemma-3-text sample
@@ -235,13 +221,10 @@
   ([model-path]
    (gemma-3-cpu model-path nil)))
 
-(use 'uncomplicate.snapdragan)
-(use 'uncomplicate.snapdragan.cuda)
-
 (defn gemma-3-gpu ;;TODO this should be a protocol that dispatches based on factory!
-  ([fact model-path args]
-   (let [{:keys [env batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
-                 context-len tokenizer tokenizer-config embedding
+  ([fact env model-path args]
+   (let [{:keys [batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
+                 context-len embedding
                  embedding-inputs embedding-outputs text-inputs text-outputs
                  opts]
           :or {batch-size 1}
@@ -274,21 +257,22 @@
                                           :use-device-allocator-for-initializers true
                                           :initial-cpu-capacity-bytes 2147483648
                                           :use-env-allocators true}))
-                   tokenizer-constructor (partial hft (format "%s/%s" model-path tokenizer))
-                   embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
-                   text-sess (session env (format "%s/%s" model-path gemma-3-text) text-opt)
+
                    mem-info (memory-info (device (neanderthal-factory fact :float)) :device 0 :default)
-                   gemma-3-embedding (embedding-model fact mem-info embedding-sess embedding-opt
+                   sess-embedding (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
+                   sess-text (session env (format "%s/%s" model-path gemma-3-text) text-opt)
+                   gemma-3-embedding (embedding-model fact mem-info sess-embedding embedding-opt
                                                       embedding-inputs embedding-outputs)
-                   gemma-3-text (text-model fact mem-info text-sess text-opt
+                   gemma-3-text (text-model fact mem-info sess-text text-opt
                                             text-inputs text-outputs
                                             (output gemma-3-embedding) context-len)
-                   sample (uncomplicate.snapdragan/sampler (.ge-decode-logits gemma-3-text) (view-vctr (input gemma-3-embedding)))];;tODO reflection
-       (->Gemma3 fact tokenizer-constructor
+                   sample (sampler (.ge-decode-logits gemma-3-text) (view-vctr (input gemma-3-embedding)))];;tODO reflection
+       (gemma-3-embedding)
+       (->Gemma3 fact
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
                  mem-info gemma-3-embedding gemma-3-text sample
                  batch-size))))
-  ([model-path args]
-   (gemma-3-gpu *diamond-factory* model-path args))
+  ([env model-path args]
+   (gemma-3-gpu *diamond-factory* env model-path args))
   ([model-path]
    (gemma-3-gpu model-path nil)))

@@ -159,3 +159,7 @@
     (st (first (time (gemma-3! nil)))) => " Serbia"
     (st (first (time (gemma-3! nil)))) => "."
     (println "----------------- decode ends ------------------")))
+
+TODO slusaj sad ovo. onaj community ONNX model ima slicnu strukturu kao ovo. jos ima i number of tokens to keep, sto je prava muzika za moje usi.
+Probaj prvo njega na cpu, pa ako li proradi lepo, i ako je brzi od ovog prokletnika, kurtalisi ovo u korist tog community modela. Jos ako radi
+sa OpenVINO, puna kapa! Probaj i na GPU. Najbolje bi bilo da imam univerzalnu podrsku za oba, naravno...
