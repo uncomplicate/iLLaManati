@@ -149,8 +149,8 @@
 (def model-path "../data/Gemma-3-ONNX/gemma-3-4b-it")
 (def tokenizer (gemma-3-tokenizer model-path));;TODO THIS causes CUDA troubles, probably by messing up loaded libraries. Moreover, even the CUDA EP warmup only postponest the crash, which happens after a few turns. I have to replace DJL tokenizer with something else!
 (def text-input "Belgrade is the capital")
-(def encoding (encode tokenizer text-input))
-(def st (decoder tokenizer))
+(def encoding (encode tokenizer1 text-input))
+(def st (decoder tokenizer1))
 
 (let [st identity
       ]

@@ -33,3 +33,6 @@
 
 (defn pad-token [config]
   (api/pad-token config))
+
+(defn pad-id [config]
+  "TODO")

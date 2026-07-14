@@ -1,4 +1,4 @@
-(defproject org.uncomplicate/illamanati-onnxrt "0.1.0-SNAPSHOT"
+(defproject org.uncomplicate/illamanati-onnxrt "0.2.0-SNAPSHOT"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
@@ -9,11 +9,11 @@
                  ;; which then might clash with the versions that you project includes.
                  ;; If you want to try the Hello World without AOT, just comment out the uncomplicate/deep-diamond
                  ;; dependency!
-                 [org.uncomplicate/neanderthal-base "0.63.0"]
-                 [org.uncomplicate/deep-diamond-base "0.45.0"]
-                 [org.uncomplicate/deep-diamond-dnnl "0.45.0"]
-                 [org.uncomplicate/diamond-onnxrt "0.26.0-SNAPSHOT"]
-                 [org.uncomplicate/illamanati-tokenizer "0.1.0-SNAPSHOT"]]
+                 [org.uncomplicate/neanderthal-base "0.64.0"]
+                 [org.uncomplicate/deep-diamond-base "0.46.0"]
+                 [org.uncomplicate/deep-diamond-dnnl "0.46.0"]
+                 [org.uncomplicate/diamond-onnxrt "0.27.0-SNAPSHOT"]
+                 [org.uncomplicate/illamanati-tokenizer "0.3.0-SNAPSHOT"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
@@ -28,18 +28,17 @@
                        :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=true"
                                             "--enable-native-access=ALL-UNNAMED"]}
              :linux {:dependencies [[org.bytedeco/onnxruntime-platform-gpu "1.26.0-1.5.14-SNAPSHOT"]
-                                    [org.uncomplicate/neanderthal-mkl "0.63.0"]
+                                    [org.uncomplicate/neanderthal-mkl "0.64.0"]
                                     [org.bytedeco/mkl "2025.3-1.5.13" :classifier "linux-x86_64-redist"]
-                                    [org.uncomplicate/deep-diamond-cuda "0.46.0-SNAPSHOT"]
-                                    [org.uncomplicate/snapdragan-cuda "0.4.0-SNAPSHOT"]
+                                    [org.uncomplicate/deep-diamond-cuda "0.46.0"]
+                                    [org.uncomplicate/snapdragan-cuda "0.5.0-SNAPSHOT"]
                                     [org.bytedeco/cuda-platform "13.2-9.21-1.5.14-SNAPSHOT"]
                                     [org.bytedeco/cuda-redist "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-cublas "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-cudnn "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
-                                    [org.bytedeco/cuda-redist-nccl "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
-                                    ]}
+                                    [org.bytedeco/cuda-redist-nccl "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]]}
              :windows {:dependencies [[org.bytedeco/onnxruntime-platform-gpu "1.26.0-1.5.14-SNAPSHOT"]
-                                      [org.uncomplicate/neanderthal-mkl "0.63.0"]
+                                      [org.uncomplicate/neanderthal-mkl "0.64.0"]
                                       [org.bytedeco/mkl "2025.3-1.5.13" :classifier "windows-x86_64-redist"]
                                       [org.uncomplicate/deep-diamond-cuda "0.46.0"]
                                       [org.bytedeco/cuda-redist "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
@@ -47,7 +46,7 @@
                                       [org.bytedeco/cuda-redist-cudnn "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
                                       [org.bytedeco/cuda-redist-nccl "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
                                       [org.uncomplicate/snapdragan-cuda "0.2.0-SNAPSHOT"]]}
-             :macosx {:dependencies [[org.uncomplicate/neanderthal-accelerate "0.63.0"]
+             :macosx {:dependencies [[org.uncomplicate/neanderthal-accelerate "0.64.0"]
                                      [org.bytedeco/openblas "0.3.31-1.5.13" :classifier "macosx-arm64"]]}}
 
   ;; Wee need this for the DNNL binaries, for the latest version is not available in the Maven Central yet

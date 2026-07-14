@@ -34,7 +34,7 @@
              [model :refer [create-tz tensor-desc]]]
             [uncomplicate.illamanati.internal.onnxrt.inference :refer [text-model embedding-model]]
             [uncomplicate.illamanati.tokenizer :refer [TokenizerProvider]]
-            [uncomplicate.illamanati.internal.huggingface.tokenizer-fast :refer [hft]]
+            [uncomplicate.illamanati.internal.sentencepiece :refer [spp]]
             [uncomplicate.snapdragan :refer [sampler]]
             [uncomplicate.snapdragan.cuda :refer []])
   (:import [clojure.lang IFn AFn]))
@@ -44,8 +44,8 @@
                           :context-len 128000
                           :gemma-3-text "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/gemma-3-text.onnx"
                           :gemma-3-embedding "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/gemma-3-embedding.onnx"
-                          :tokenizer "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer.json"
-                          :tokenizer-config "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer_config.json"
+                          :tokenizer "gemma-3-tokenizer.model"
+                          ;;:tokenizer-config "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer_config.json"
                           :embedding-inputs ["input_ids" "image_features"]
                           :embedding-outputs ["inputs_embeds"]
                           :text-inputs ["inputs_embeds" "attention_mask"]
@@ -57,8 +57,8 @@
                           :context-len 128000
                           :gemma-3-text "gpu/gpu-fp16-io-int4-rtn-block-32/gemma-3-text.onnx"
                           :gemma-3-embedding "gpu/gpu-fp16-io-int4-rtn-block-32/gemma-3-embedding.onnx"
-                          :tokenizer "gpu/gpu-fp16-io-int4-rtn-block-32/tokenizer.json"
-                          :tokenizer-config "gpu/gpu-fp16-io-int4-rtn-block-32/tokenizer_config.json"
+                          :tokenizer "gemma-3-tokenizer.model"
+                          ;;:tokenizer-config "gpu/gpu-fp16-io-int4-rtn-block-32/tokenizer_config.json"
                           :embedding-inputs ["input_ids" "image_features"]
                           :embedding-outputs ["inputs_embeds"]
                           :text-inputs ["inputs_embeds" "attention_mask" "position_ids"]
@@ -181,7 +181,7 @@
                       {:seq-size seq-size}))))
 
 (defn gemma-3-tokenizer [model-path]
-  (hft (format "%s/%s" model-path (:tokenizer gemma-3-cpu-default))))
+  (spp (format "%s/%s" model-path (:tokenizer gemma-3-cpu-default))))
 
 (defn gemma-3-cpu
   ([fact model-path args]
@@ -204,7 +204,7 @@
                                                 batch-size)
                    embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
                    text-sess (session env (format "%s/%s" model-path gemma-3-text) text-opt)
-                   mem-info (memory-info (device (neanderthal-factory fact :float)) :device 0 :default)
+                   mem-info (memory-info (device (neanderthal-factory fact :float)) :device :default)
                    gemma-3-embedding (embedding-model fact mem-info embedding-sess embedding-opt
                                                       embedding-inputs embedding-outputs)
                    gemma-3-text (text-model fact mem-info text-sess text-opt
@@ -258,7 +258,7 @@
                                           :initial-cpu-capacity-bytes 2147483648
                                           :use-env-allocators true}))
 
-                   mem-info (memory-info (device (neanderthal-factory fact :float)) :device 0 :default)
+                   mem-info (memory-info (device (neanderthal-factory fact :float)) :device :default)
                    sess-embedding (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
                    sess-text (session env (format "%s/%s" model-path gemma-3-text) text-opt)
                    gemma-3-embedding (embedding-model fact mem-info sess-embedding embedding-opt

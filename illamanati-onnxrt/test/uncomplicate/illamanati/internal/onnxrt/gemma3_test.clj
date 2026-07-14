@@ -105,7 +105,7 @@
                attention-mask (create-tz attention-mask-desc)
                logits-desc (tensor-desc [batch-size seq-len vocab-size] :float)
                logits (create-tz logits-desc)
-               mem-info (memory-info :cpu :device 0 :default)
+               mem-info (memory-info :cpu :device :default)
                onnx-input-ids (onnx-tensor mem-info [batch-size seq-len] (buffer input-ids) :long)
                onnx-image-features (onnx-tensor mem-info [0 0 hidden-size] (buffer image-features) :float)
                onnx-embeds (onnx-tensor mem-info [batch-size seq-len hidden-size] (buffer embeds) :float)
@@ -159,7 +159,3 @@
     (st (first (time (gemma-3! nil)))) => " Serbia"
     (st (first (time (gemma-3! nil)))) => "."
     (println "----------------- decode ends ------------------")))
-
-TODO slusaj sad ovo. onaj community ONNX model ima slicnu strukturu kao ovo. jos ima i number of tokens to keep, sto je prava muzika za moje usi.
-Probaj prvo njega na cpu, pa ako li proradi lepo, i ako je brzi od ovog prokletnika, kurtalisi ovo u korist tog community modela. Jos ako radi
-sa OpenVINO, puna kapa! Probaj i na GPU. Najbolje bi bilo da imam univerzalnu podrsku za oba, naravno...
