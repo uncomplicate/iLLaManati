@@ -12,18 +12,43 @@
             [uncomplicate.commons
              [core :refer [with-release Releaseable release size]]
              [utils :refer [path dragan-says-ex]]]
+            [uncomplicate.fluokitten.core :refer [fmap]]
             [uncomplicate.neanderthal
              [core :refer [dim]]
              [integer :refer [entry]]]
             [uncomplicate.illamanati.internal
              [protocols :as api]
              [streaming-decoder :refer [streaming-decoder sentencepiece-lookup]]])
-  (:import [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]
+  (:import [clojure.lang IFn AFn Seqable]
+           [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]
            [org.bytedeco.sentencepiece SentencePieceProcessor Status IntVector StringVector]
            [uncomplicate.neanderthal.internal.api IntegerVector IntegerMatrix LayoutNavigator]))
 
+(defprotocol Encodable
+  (encode [src encoder]))
+
 (defprotocol Decodable
   (decode [src decoder]))
+
+(declare ->IntVectorEncoder)
+
+;; ================== Encodables ===============================================
+
+(extend-type String
+  Encodable
+  (encode [text ^SentencePieceProcessor processor]
+    (->IntVectorEncoder (.EncodeAsIds processor text)
+                        (delay (.EncodeAsPieces processor text)))))
+
+(extend-type (Class/forName "[Ljava.lang.String;")
+  Encodable
+  (encode [text ^SentencePieceProcessor processor]
+    (mapv #(encode % processor) text)))
+
+(extend-type Seqable
+  Encodable
+  (encode [text ^SentencePieceProcessor processor]
+    (mapv #(encode % processor) text)))
 
 ;; ----------------- 2D arrays -------------------------------------------------
 
@@ -34,7 +59,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (aget srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type (Class/forName "[[I")
   Decodable
@@ -43,7 +68,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (aget srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type (Class/forName "[[S")
   Decodable
@@ -52,7 +77,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (aget srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 ;; -------------- 1D arrays ----------------------------------------------------
 
@@ -63,7 +88,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (aget srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type (Class/forName "[I")
   Decodable
@@ -72,7 +97,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (aget srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type (Class/forName "[S")
   Decodable
@@ -81,7 +106,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (aget srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type (Class/forName "[B")
   Decodable
@@ -90,7 +115,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (aget srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type LongPointer
   Decodable
@@ -99,7 +124,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (.get ^LongPointer srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type IntPointer
   Decodable
@@ -108,7 +133,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (.get ^IntPointer srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type ShortPointer
   Decodable
@@ -117,7 +142,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (.get ^ShortPointer srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type BytePointer
   Decodable
@@ -126,7 +151,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (.get ^BytePointer srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type BytePointer
   Decodable
@@ -135,7 +160,7 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (.get ^BytePointer srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type IntegerVector
   Decodable
@@ -144,7 +169,19 @@
       (with-release [v (IntVector. len)]
         (dotimes [i len]
           (.put ^IntVector v i (int (entry srcs i))))
-        (.decodeIds ^SentencePieceProcessor processor srcs)))))
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
+
+(extend-type Seqable
+  Decodable
+  (decode [srcs processor]
+    (let [len (count srcs)]
+      (with-release [v (IntVector. len)]
+        (reduce (fn ^long [^long i ^long e]
+                  (.put v i (int e))
+                  (inc i))
+                0
+                srcs)
+        (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 ;; ============== SentencePiece extensions ===============================================
 
@@ -173,6 +210,11 @@
     (when (realized? encoding-tokens)
       (.close ^StringVector (deref encoding-tokens)))
     true)
+  IFn
+  (invoke [_]
+    (.get encoding-ids))
+  (applyTo [this xs]
+    (AFn/applyToHelper this xs))
   api/EncodingIds
   (ids [this]
     (.get encoding-ids))
@@ -188,12 +230,27 @@
   (release [_]
     (.close processor)
     true)
+  IFn
+  (invoke [_ text-or-token-ids]
+    (if (or (string? text-or-token-ids) (string? (first text-or-token-ids)))
+      (with-release [enc (encode text-or-token-ids processor)]
+        (api/ids enc))
+      (decode text-or-token-ids processor)))
+  (invoke [_]
+    decoder-fn)
+  (applyTo [this xs]
+    (AFn/applyToHelper this xs))
   api/Encoder
   (encode [this text]
-    (->IntVectorEncoder (.EncodeAsIds processor text) (delay (.EncodeAsPieces processor text))))
-  api/DecoderProvider
-  (api/decoder [_]
-    decoder-fn))
+    (encode text processor)))
+
+(extend-type java.util.Collection
+  api/EncodingIds
+  (ids [this]
+    (mapv api/ids this))
+  api/EncodingTokens
+  (tokens [this]
+    (mapv api/tokens this)))
 
 (defn spp [source]
   (cond

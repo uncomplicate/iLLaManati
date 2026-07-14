@@ -26,6 +26,7 @@
   (:import [java.io InputStream ByteArrayOutputStream]
            [java.nio ByteBuffer CharBuffer BufferOverflowException]
            [java.nio.charset Charset StandardCharsets CodingErrorAction]
+           [clojure.lang IFn AFn]
            [ai.djl.huggingface.tokenizers HuggingFaceTokenizer Encoding TokenizerConfig]
            [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]
            [uncomplicate.neanderthal.internal.api IntegerVector IntegerMatrix LayoutNavigator]))
@@ -186,76 +187,76 @@
   (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft (long-array src))))
 
-;; ============= Vectors and matrices ==========================================
+;; ;; ============= Vectors and matrices ==========================================
 
-(extend-type IntegerVector
-  CoerceLongArray
-  (to-longs
-    ([this]
-     (to-longs this (long-array (dim this))))
-    ([this ^longs dst!]
-     (if (contiguous? this)
-       (to-longs (buffer this) dst!)
-       (transfer! this dst!)))
-    ([this ^longs dst! ^longs dst-offset]
-     (if (contiguous? this)
-       (to-longs (buffer this) dst! dst-offset)
-       (dragan-says-ex "Only contiguous vectors can be copied to arrays with offset."))))
-  (from-longs [this! src]
-    (if (contiguous? this!)
-      (from-longs (buffer this!) src)
-      (transfer! src this!))
-    this!)
-  Decodable
-  (decode [data ^HuggingFaceTokenizer hft]
-    (.decode hft (to-longs data))))
+;; (extend-type IntegerVector
+;;   CoerceLongArray
+;;   (to-longs
+;;     ([this]
+;;      (to-longs this (long-array (dim this))))
+;;     ([this ^longs dst!]
+;;      (if (contiguous? this)
+;;        (to-longs (buffer this) dst!)
+;;        (transfer! this dst!)))
+;;     ([this ^longs dst! ^longs dst-offset]
+;;      (if (contiguous? this)
+;;        (to-longs (buffer this) dst! dst-offset)
+;;        (dragan-says-ex "Only contiguous vectors can be copied to arrays with offset."))))
+;;   (from-longs [this! src]
+;;     (if (contiguous? this!)
+;;       (from-longs (buffer this!) src)
+;;       (transfer! src this!))
+;;     this!)
+;;   Decodable
+;;   (decode [data ^HuggingFaceTokenizer hft]
+;;     (.decode hft (to-longs data))))
 
-(extend-type IntegerMatrix
-  CoerceLongArray
-  (to-longs
-    ([data]
-     (let [stor (full-storage data)
-           batch (.fd stor)
-           n (.sd stor)
-           res (make-array Long/TYPE batch n)]
-       (to-longs data res)))
-    ([data ^"[[J" dst!]
-     (to-longs data dst! 0))
-    ([data ^"[[J" dst! ^long dst-offset]
-     (let [nav (navigator data)
-           batch (alength dst!)]
-       (dotimes [i batch]
-         (to-longs (.stripe nav data i) (aget dst! i) dst-offset))
-       dst!)))
-  (from-longs [this! src]
-    (let [stor (full-storage this!)
-          nav (navigator this!)
-          batch (.fd stor)
-          n (.sd stor)]
-      (if (contiguous? this!)
-        (dotimes [i batch]
-          (from-longs (buffer (.stripe nav this! i)) (get (vec src) i)))
-        (dotimes [i batch]
-          (transfer! (get (vec src) i) (.stripe nav this! i))))
-      this!)
-    (transfer! (seq src) this!))
-  api/EncodingIds
-  (ids [this! encodings]
-    (let [stor (full-storage this!)
-          nav (navigator this!)
-          batch (.fd stor)
-          n (.sd stor)]
-      (if (contiguous? this!)
-        (dotimes [i batch]
-          (from-longs (buffer (.stripe nav this! i))
-                      (.getIds ^Encoding (aget ^"[Lai.djl.huggingface.tokenizers.Encoding;" encodings i))))
-        (dotimes [i batch]
-          (transfer! (.getIds ^Encoding (aget ^"[Lai.djl.huggingface.tokenizers.Encoding;" encodings i))
-                     (.stripe nav this! i))))
-      this!))
-  Decodable
-  (decode [data ^HuggingFaceTokenizer hft]
-    (.batchDecode hft (to-longs data) false false)))
+;; (extend-type IntegerMatrix
+;;   CoerceLongArray
+;;   (to-longs
+;;     ([data]
+;;      (let [stor (full-storage data)
+;;            batch (.fd stor)
+;;            n (.sd stor)
+;;            res (make-array Long/TYPE batch n)]
+;;        (to-longs data res)))
+;;     ([data ^"[[J" dst!]
+;;      (to-longs data dst! 0))
+;;     ([data ^"[[J" dst! ^long dst-offset]
+;;      (let [nav (navigator data)
+;;            batch (alength dst!)]
+;;        (dotimes [i batch]
+;;          (to-longs (.stripe nav data i) (aget dst! i) dst-offset))
+;;        dst!)))
+;;   (from-longs [this! src]
+;;     (let [stor (full-storage this!)
+;;           nav (navigator this!)
+;;           batch (.fd stor)
+;;           n (.sd stor)]
+;;       (if (contiguous? this!)
+;;         (dotimes [i batch]
+;;           (from-longs (buffer (.stripe nav this! i)) (get (vec src) i)))
+;;         (dotimes [i batch]
+;;           (transfer! (get (vec src) i) (.stripe nav this! i))))
+;;       this!)
+;;     (transfer! (seq src) this!))
+;;   api/EncodingIds
+;;   (ids [this! encodings]
+;;     (let [stor (full-storage this!)
+;;           nav (navigator this!)
+;;           batch (.fd stor)
+;;           n (.sd stor)]
+;;       (if (contiguous? this!)
+;;         (dotimes [i batch]
+;;           (from-longs (buffer (.stripe nav this! i))
+;;                       (.getIds ^Encoding (aget ^"[Lai.djl.huggingface.tokenizers.Encoding;" encodings i))))
+;;         (dotimes [i batch]
+;;           (transfer! (.getIds ^Encoding (aget ^"[Lai.djl.huggingface.tokenizers.Encoding;" encodings i))
+;;                      (.stripe nav this! i))))
+;;       this!))
+;;   Decodable
+;;   (decode [data ^HuggingFaceTokenizer hft]
+;;     (.batchDecode hft (to-longs data) false false)))
 
 ;; ============== HUF extensions ===============================================
 
@@ -267,12 +268,19 @@
   (release [_]
     (.close hft)
     true)
+  IFn
+  (invoke [_ text-or-token-ids]
+    (if (or (string? text-or-token-ids) (string? (first text-or-token-ids)))
+          (with-release [enc (encode text-or-token-ids hft)]
+            (api/ids enc))
+          (decode text-or-token-ids hft)))
+  (invoke [_]
+    decoder-fn)
+  (applyTo [this xs]
+    (AFn/applyToHelper this xs))
   api/Encoder
   (encode [this text]
-    (encode text hft))
-  api/DecoderProvider
-  (api/decoder [_]
-    decoder-fn))
+    (encode text hft)))
 
 (defn hft [source]
   (cond
@@ -290,36 +298,27 @@
 
 (extend-type Encoding
   api/EncodingIds
-  (ids
-    ([this]
-     (.getIds this))
-    ([this dst!]
-     (from-longs dst! (.getIds this))))
+  (ids [this]
+    (.getIds this))
   api/EncodingTokens
   (tokens [this]
     (.getTokens this)))
 
 (extend-type (Class/forName "[Lai.djl.huggingface.tokenizers.Encoding;")
   api/EncodingIds
-  (ids
-    ([this]
-     (map #(.getIds ^Encoding %) this))
-    ([this dst!]
-     (api/ids dst! this)))
+  (ids [this]
+    (mapv api/ids this))
   api/EncodingTokens
   (tokens [this]
-    (map #(.getTokens ^Encoding %) this)))
+    (mapv api/tokens this)))
 
 (extend-type java.util.Collection
   api/EncodingIds
-  (ids
-    ([this]
-     (fmap #(.getIds ^Encoding %) this))
-    ([this dst!]
-     (api/ids dst! this)))
+  (ids [this]
+    (fmap api/ids this))
   api/EncodingTokens
   (tokens [this]
-    (fmap #(.getTokens ^Encoding %) this)))
+    (fmap api/tokens this)))
 
 (extend-type TokenizerConfig
   api/Config

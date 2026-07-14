@@ -16,14 +16,8 @@
 (defprotocol Encoder
   (encode [this text]))
 
-(defprotocol DecoderProvider
-  (decoder [this]))
-
 (defprotocol EncodingIds
-  (ids [this] [this dst!]))
+  (ids [this]))
 
 (defprotocol EncodingTokens
   (tokens [this]))
-
-(defprotocol Decodable
-  (decode [src decoder]))

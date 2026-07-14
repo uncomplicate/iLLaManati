@@ -16,17 +16,8 @@
 (defn encode [tokenizer text]
   (api/encode tokenizer text))
 
-(defn decoder [tokenizer]
-  (api/decoder tokenizer))
-
-(defn pad-token [tokenizer]
-  (api/pad-token tokenizer))
-
 (defn ids [encoding]
-  (api/ids encoding))
-
-(defn ids! [encoding dst!]
-  (api/ids encoding dst!))
+  (seq (api/ids encoding)))
 
 (defn tokens [encoding]
   (seq (api/tokens encoding)))

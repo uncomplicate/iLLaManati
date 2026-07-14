@@ -160,7 +160,7 @@
         (entry! (view-vctr mask) 1)
         (text-model! embeds onnx-embeds mask onnx-mask position-ids onnx-position-ids logits onnx-logits)
         (let [res (sample! arg)]
-          (uncomplicate.clojurecuda.core/synchronize! (flow fact))
+          (uncomplicate.clojurecuda.core/synchronize! (flow fact));;TODO remove this as it is a leftover from previous tests
           res))))
   (invoke [_ arg]
     (embedding-model!)
