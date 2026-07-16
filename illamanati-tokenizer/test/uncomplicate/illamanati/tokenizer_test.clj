@@ -9,7 +9,8 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.tokenizer-test
   (:require [midje.sweet :refer [facts =>]]
-            [clojure.core.async :refer [chan io-thread >!! <!! poll!]]
+            [clojure.core.async :refer [chan io-thread >!! <!! poll! timeout alts!!]]
+            [clojure.core.async.flow :as flow :refer [create-flow start resume stop inject process]]
             [clojure.string :refer [join]]
             [uncomplicate.commons.core :refer [with-release]]
             [uncomplicate.neanderthal
@@ -67,3 +68,24 @@
            (doseq [id (<!! ids-chan)]
              (>!! id-chan id))
            (join (repeatedly 3 #(<!! text2-chan))) => "Hello there!")))
+
+(defn test-tokenizer-flow [tok]
+  (facts "Test tokenizer flow."
+         (let [input "Hello there!"
+               topology {:procs {:enc {:proc (process #'encoder)
+                                       :args {:tokenizer tok}}
+                                 :dec {:proc (process #'decoder)
+                                       :args {:tokenizer tok}}
+                                 :monitor {:proc (process (fn
+                                                            ([] {:ins {:in :data}})
+                                                            ([s] s)
+                                                            ([s _] s)
+                                                            ([s _ m] [s {::flow/report [m]}])))}}
+                         :conns [[[:enc :out] [:dec :in]]
+                                 [[:dec :out] [:monitor :in]]]}
+               f (create-flow topology)
+               running-flow (start f)]
+           (resume f)
+           (inject f [:enc :in] [input])
+           (join (repeatedly 3 #(<!! (:report-chan running-flow)))) => input
+           (stop f))))

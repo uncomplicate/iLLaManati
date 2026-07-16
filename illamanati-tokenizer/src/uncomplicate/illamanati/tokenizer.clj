@@ -33,15 +33,42 @@
      (loop [text (<!! text-chan)]
        (when text
          (with-release [encoding (api/encode tzr text)]
-           (>!! ids-chan (api/ids encoding)))
+           (>!! ids-chan (ids encoding)))
          (recur (<!! text-chan)))))))
 
 (defn async-decoder [tokenizer-provider id-chan text-chan]
   (io-thread
-   (with-release [decoder ((api/tokenizer tokenizer-provider))]
+   (let [decoder ((api/tokenizer tokenizer-provider))]
      (loop [id (<!! id-chan)]
        (when id
-         (let [decoded-part (decoder id)]
-           (if (and decoded-part (not= "" decoded-part))
+         (when-let [decoded-part (decoder id)]
+           (when-not (= "" decoded-part)
              (>!! text-chan decoded-part)))
          (recur (<!! id-chan)))))))
+
+(defn encoder
+  ([]
+   {:params {:tokenizer "Tokenizer Provider"}
+    :ins {:in "Text"}
+    :outs {:out "Token ids"}})
+  ([args]
+   (api/tokenizer (:tokenizer args)))
+  ([tokenizer _]
+   tokenizer)
+  ([tokenizer _ text]
+   (with-release [encoding (api/encode tokenizer text)]
+     [tokenizer {:out (ids encoding)}])))
+
+(defn decoder
+  ([]
+   {:params {:tokenizer "Tokenizer Provider"}
+    :ins {:in "Token id"}
+    :outs {:out "Token text"}})
+  ([args]
+   ((api/tokenizer (:tokenizer args))))
+  ([decoder _]
+   decoder)
+  ([decoder _ id]
+   [decoder (when-let [decoded-part (decoder id)]
+              (when-not (= "" decoded-part)
+                {:out [decoded-part]}))]))

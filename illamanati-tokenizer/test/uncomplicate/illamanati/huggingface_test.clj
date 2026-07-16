@@ -22,4 +22,5 @@
   (test-streaming-decoder hf)
   (test-vector hf)
   (test-matrix hf)
-  (test-async-tokenizer hf))
+  (test-async-tokenizer hf)
+  (test-tokenizer-flow hf))

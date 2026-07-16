@@ -19,4 +19,5 @@
   (test-streaming-decoder sp)
   (test-vector sp)
   (test-matrix sp)
-  (test-async-tokenizer sp))
+  (test-async-tokenizer sp)
+  (test-tokenizer-flow sp))
