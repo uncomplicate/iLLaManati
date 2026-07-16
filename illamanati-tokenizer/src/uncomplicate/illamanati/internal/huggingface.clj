@@ -6,7 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(ns ^{:author "Dragan Djuric"}
+ (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.huggingface
   (:require [clojure.java.io :refer [input-stream copy]]
             [uncomplicate.commons
@@ -155,11 +155,11 @@
   CoerceLongArray
   (to-longs
     ([this]
-     (ip->longs this))
+     (sp->longs this))
     ([this ^longs dst!]
-     (ip->longs this dst!))
+     (sp->longs this dst!))
     ([this ^longs dst! ^long dst-offset]
-     (ip->longs this dst! dst-offset)))
+     (sp->longs this dst! dst-offset)))
   (from-longs [this! src]
     (longs->ip src this!))
   Decodable
@@ -268,6 +268,9 @@
   (release [_]
     (.close hft)
     true)
+  api/TokenizerProvider
+  (tokenizer [this]
+    this)
   IFn
   (invoke [_ text-or-token-ids]
     (if (or (string? text-or-token-ids) (string? (first text-or-token-ids)))

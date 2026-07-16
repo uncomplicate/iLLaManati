@@ -153,15 +153,6 @@
           (.put ^IntVector v i (int (.get ^BytePointer srcs i))))
         (.DecodeIds ^SentencePieceProcessor processor v)))))
 
-(extend-type BytePointer
-  Decodable
-  (decode [srcs processor]
-    (let [len (size srcs)]
-      (with-release [v (IntVector. len)]
-        (dotimes [i len]
-          (.put ^IntVector v i (int (.get ^BytePointer srcs i))))
-        (.DecodeIds ^SentencePieceProcessor processor v)))))
-
 (extend-type IntegerVector
   Decodable
   (decode [srcs processor]
@@ -230,6 +221,9 @@
   (release [_]
     (.close processor)
     true)
+  api/TokenizerProvider
+  (tokenizer [this]
+    this)
   IFn
   (invoke [_ text-or-token-ids]
     (if (or (string? text-or-token-ids) (string? (first text-or-token-ids)))

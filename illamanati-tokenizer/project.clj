@@ -2,6 +2,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
+                 [org.clojure/core.async "1.9.865"]
                  [com.cnuernber/charred "1.038"]
                  [org.bytedeco/sentencepiece-platform "0.2.1-1.5.13"]
                  [ai.djl.huggingface/tokenizers "0.36.0"]

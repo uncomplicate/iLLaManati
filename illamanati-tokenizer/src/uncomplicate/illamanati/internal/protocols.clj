@@ -21,3 +21,6 @@
 
 (defprotocol EncodingTokens
   (tokens [this]))
+
+(defprotocol TokenizerProvider
+  (tokenizer [this]))

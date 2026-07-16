@@ -9,6 +9,8 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.tokenizer-test
   (:require [midje.sweet :refer [facts =>]]
+            [clojure.core.async :refer [chan io-thread >!! <!! poll!]]
+            [clojure.string :refer [join]]
             [uncomplicate.commons.core :refer [with-release]]
             [uncomplicate.neanderthal
              [core :refer [vctr ge zero cols rows]]
@@ -51,3 +53,17 @@
            (map seq (tokenizer (repeat 3 input))) => (repeat 3 [9259 236764 147224 236888 2088 563 506 7606 528 86221 236881])
            (map seq (cols m)) => (repeat 3 [9259 236764 147224 236888 2088 563 506 7606 528 86221 236881])
            (map #(apply str (map st %)) (cols m)) => (repeat 3 input))))
+
+
+(defn test-async-tokenizer [tok]
+  (let [text-chan (chan 100)
+        ids-chan (chan 100)
+        id-chan (chan 100)
+        text2-chan (chan 100)
+        atok (async-encoder tok text-chan ids-chan)
+        adetok (async-decoder tok id-chan text2-chan)]
+    (facts "Test async-tokenizer"
+           (>!! text-chan "Hello there!")
+           (doseq [id (<!! ids-chan)]
+             (>!! id-chan id))
+           (join (repeatedly 3 #(<!! text2-chan))) => "Hello there!")))

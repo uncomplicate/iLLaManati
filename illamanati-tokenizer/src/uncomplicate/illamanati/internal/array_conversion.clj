@@ -51,7 +51,7 @@
   (^longs [^ints src ^longs dst!]
    (ints->longs src dst! 0))
   (^longs [^ints src]
-   (ints->longs (long-array (alength src)) 0)))
+   (ints->longs src (long-array (alength src)) 0)))
 
 (defn longs->ints
   (^ints [^longs src ^ints dst!]
@@ -93,16 +93,16 @@
   (^longs [^shorts src ^longs dst!]
    (shorts->longs src dst! 0))
   (^longs [^shorts src]
-   (shorts->longs (long-array (alength src)) 0)))
+   (shorts->longs src (long-array (alength src)) 0)))
 
 (defn longs->shorts
   (^shorts [^longs src ^shorts dst!]
-   (let [len (alength src)]
+   (let [len (min (alength src) (alength dst!))]
      (dotimes [i len]
-       (aset ^ints dst! i (aget ^shorts src i)))
+       (aset ^shorts dst! i (short (aget ^longs src i))))
      dst!))
   (^shorts [^longs src]
-   (longs->shorts (int-array (alength src)))))
+   (longs->shorts src (short-array (alength src)))))
 
 (defn sp->longs
   (^longs [^ShortPointer src ^longs dst! ^long dst-offset]
