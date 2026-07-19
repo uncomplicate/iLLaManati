@@ -59,20 +59,26 @@
 
 ;; ----------------- 2D arrays -------------------------------------------------
 
-(extend-type (Class/forName "[[J")
+(extend-type long/2
   Decodable
-  (decode [srcs ^HuggingFaceTokenizer hft]
-    (.batchDecode hft srcs false false)))
+  (decode [srcs hft]
+    (.batchDecode ^HuggingFaceTokenizer hft ^long/2 srcs false)))
 
-(extend-type (Class/forName "[[I")
+(extend-type int/2
   Decodable
-  (decode [srcs ^HuggingFaceTokenizer hft]
-    (.batchDecode hft (ints->longs srcs (make-array Integer/TYPE (alength ^ints srcs) 0)) false false)))
+  (decode [srcs hft]
+    (let [long2 (make-array long/2 (alength ^int/2 srcs) (alength ^ints (aget ^int/2 srcs 0)))]
+      (dotimes [i (alength ^int/2 srcs)]
+        (ints->longs (aget ^int/2 srcs i) (aget ^long/2 long2 i)))
+      (.batchDecode ^HuggingFaceTokenizer hft ^long/2 long2 false))))
 
-(extend-type (Class/forName "[[S")
+(extend-type short/2
   Decodable
-  (decode [srcs ^HuggingFaceTokenizer hft]
-    (.batchDecode hft (shorts->longs srcs (make-array Long/TYPE (alength ^shorts srcs) 0)) false false)))
+  (decode [srcs hft]
+    (let [long2 (make-array long/2 (alength ^short/2 srcs) (alength ^shorts (aget ^short/2 srcs 0)))]
+      (dotimes [i (alength ^short/2 srcs)]
+        (shorts->longs (aget ^short/2 srcs i) (aget ^long/2 long2 i)))
+      (.batchDecode ^HuggingFaceTokenizer hft ^long/2 long2 false))))
 
 ;; -------------- 1D arrays ----------------------------------------------------
 
@@ -168,11 +174,11 @@
 
 (extend-type java.util.List
   Encodable
-  (encode [text ^HuggingFaceTokenizer hft]
-    (.batchEncode hft text false false))
+  (encode [text hft]
+    (.batchEncode ^HuggingFaceTokenizer hft text false false))
   Decodable
-  (decode [src ^HuggingFaceTokenizer hft]
-    (.batchDecode hft src false false)))
+  (decode [src hft]
+    (.batchDecode ^HuggingFaceTokenizer hft src false)))
 
 (extend-type clojure.lang.Sequential
   CoerceLongArray

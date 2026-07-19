@@ -52,69 +52,57 @@
 
 ;; ----------------- 2D arrays -------------------------------------------------
 
-(extend-type (Class/forName "[[J")
+(extend-type long/2
   Decodable
   (decode [srcs processor]
-    (let [len (alength srcs)]
-      (with-release [v (IntVector. len)]
-        (dotimes [i len]
-          (.put ^IntVector v i (int (aget srcs i))))
-        (.DecodeIds ^SentencePieceProcessor processor v)))))
+    (mapv #(decode % processor) (seq srcs))))
 
-(extend-type (Class/forName "[[I")
+(extend-type int/2
   Decodable
   (decode [srcs processor]
-    (let [len (alength srcs)]
-      (with-release [v (IntVector. len)]
-        (dotimes [i len]
-          (.put ^IntVector v i (int (aget srcs i))))
-        (.DecodeIds ^SentencePieceProcessor processor v)))))
+    (mapv #(decode % processor) (seq srcs))))
 
-(extend-type (Class/forName "[[S")
+(extend-type short/2
   Decodable
   (decode [srcs processor]
-    (let [len (alength srcs)]
-      (with-release [v (IntVector. len)]
-        (dotimes [i len]
-          (.put ^IntVector v i (int (aget srcs i))))
-        (.DecodeIds ^SentencePieceProcessor processor v)))))
+    (mapv #(decode % processor) (seq srcs))))
 
 ;; -------------- 1D arrays ----------------------------------------------------
 
-(extend-type (Class/forName "[J")
+(extend-type long/1
   Decodable
   (decode [srcs processor]
-    (let [len (alength srcs)]
+    (let [len (alength ^longs srcs)]
       (with-release [v (IntVector. len)]
         (dotimes [i len]
-          (.put ^IntVector v i (int (aget srcs i))))
+          (.put ^IntVector v i (int (aget ^longs srcs i))))
         (.DecodeIds ^SentencePieceProcessor processor v)))))
 
-(extend-type (Class/forName "[I")
+(extend-type int/1
   Decodable
   (decode [srcs processor]
-    (let [len (alength srcs)]
+    (let [len (alength ^ints srcs)]
       (with-release [v (IntVector. len)]
         (dotimes [i len]
-          (.put ^IntVector v i (int (aget srcs i))))
+          (.put ^IntVector v i (int (aget ^ints srcs i))))
         (.DecodeIds ^SentencePieceProcessor processor v)))))
 
-(extend-type (Class/forName "[S")
+(extend-type short/1
   Decodable
   (decode [srcs processor]
-    (let [len (alength srcs)]
+    (let [len (alength ^shorts srcs)]
       (with-release [v (IntVector. len)]
         (dotimes [i len]
-          (.put ^IntVector v i (int (aget srcs i))))
+          (.put ^IntVector v i (int (aget ^shorts srcs i))))
         (.DecodeIds ^SentencePieceProcessor processor v)))))
 
-(extend-type (Class/forName "[B")
+(extend-type byte/1
   Decodable
   (decode [srcs processor]
-    (let [len (alength srcs)]
+    (let [len (alength ^bytes srcs)]
       (with-release [v (IntVector. len)]
         (dotimes [i len]
-          (.put ^IntVector v i (int (aget srcs i))))
+          (.put ^IntVector v i (int (aget ^bytes srcs i))))
         (.DecodeIds ^SentencePieceProcessor processor v)))))
 
 (extend-type LongPointer
@@ -250,7 +238,7 @@
   (cond
     (bytes? source) (throw (UnsupportedOperationException. "TODO"))
     (string? source) (let [res ^SentencePieceProcessor (SentencePieceProcessor.)
-                           status ^Status (.Load res source)]
+                           status ^Status (.Load res ^String source)]
                        (if (.ok status)
                          (->SPP res (sp-streaming-decoder res))))
     :default (dragan-says-ex "This source type is unsupported." {:requested (type source)
