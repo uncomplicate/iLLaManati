@@ -10,7 +10,7 @@
     uncomplicate.illamanati.internal.sentencepiece
   (:require [clojure.java.io :refer [input-stream]]
             [uncomplicate.commons
-             [core :refer [with-release Releaseable release size]]
+             [core :refer [with-release Releaseable release size Info]]
              [utils :refer [path dragan-says-ex]]]
             [uncomplicate.fluokitten.core :refer [fmap]]
             [uncomplicate.neanderthal
@@ -22,7 +22,7 @@
   (:import [clojure.lang IFn AFn Seqable]
            [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]
            [org.bytedeco.sentencepiece SentencePieceProcessor Status IntVector StringVector]
-           [uncomplicate.neanderthal.internal.api IntegerVector IntegerMatrix LayoutNavigator]))
+           uncomplicate.neanderthal.internal.api.IntegerVector))
 
 (defprotocol Encodable
   (encode [src encoder]))
@@ -162,6 +162,16 @@
                 srcs)
         (.DecodeIds ^SentencePieceProcessor processor v)))))
 
+(extend-type Long
+  Decodable
+  (decode [src processor]
+    (.IdToPiece ^SentencePieceProcessor processor ^long src)))
+
+(extend-type Integer
+  Decodable
+  (decode [src processor]
+    (.IdToPiece ^SentencePieceProcessor processor ^int src)))
+
 ;; ============== SentencePiece extensions ===============================================
 
 (defn sp-vocabulary-array [^SentencePieceProcessor processor]
@@ -201,10 +211,20 @@
   (tokens [this]
     (.get ^StringVector (deref encoding-tokens))))
 
-(deftype SPP [^SentencePieceProcessor processor decoder-fn]
+(deftype SPP [^SentencePieceProcessor processor config decoder-fn]
   java.lang.AutoCloseable
   (close [_]
     (.close processor))
+  Info
+  (info [_]
+    config)
+  (info [_ info-key]
+    (case info-key
+      :pad (.pad_id processor)
+      :eos (.eos_id processor)
+      :bos (.bos_id processor)
+      :unk (.unk_id processor)
+      (get config info-key)))
   Releaseable
   (release [_]
     (.close processor)
@@ -237,16 +257,14 @@
 (defn spp [source]
   (cond
     (bytes? source) (throw (UnsupportedOperationException. "TODO"))
-    (string? source) (let [res ^SentencePieceProcessor (SentencePieceProcessor.)
-                           status ^Status (.Load res ^String source)]
+    (string? source) (let [processor ^SentencePieceProcessor (SentencePieceProcessor.)
+                           status ^Status (.Load processor ^String source)]
                        (if (.ok status)
-                         (->SPP res (sp-streaming-decoder res))))
+                         (->SPP processor
+                                {:pad (.pad_id processor)
+                                 :eos (.eos_id processor)
+                                 :bos (.bos_id processor)
+                                 :unk (.unk_id processor)}
+                                (sp-streaming-decoder processor))))
     :default (dragan-says-ex "This source type is unsupported." {:requested (type source)
-                                                                 :required [String]})))
-
-(extend-type SentencePieceProcessor
-  api/Config
-  (pad-token [this]
-    (let [pad (.pad_id this)]
-      (when (< -1 pad)
-        (.IdToPiece this pad)))))
+                                                                 :required String})))

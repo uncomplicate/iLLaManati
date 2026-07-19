@@ -8,7 +8,7 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.tokenizer
-  (:require [clojure.core.async :refer [<!! >!! io-thread]]
+  (:require [clojure.core.async :refer [<!! >!! io-thread chan close!]]
             [uncomplicate.commons.core :refer [with-release]]
             [uncomplicate.illamanati.internal.protocols :as api]))
 
@@ -21,30 +21,34 @@
 (defn tokens [encoding]
   (seq (api/tokens encoding)))
 
-(defn pad-token [config]
-  (api/pad-token config))
+(defn async-encoder
+  ([tokenizer-provider text-chan ids-chan]
+   (io-thread
+    (with-release [tzr (api/tokenizer tokenizer-provider)]
+      (loop [text (<!! text-chan)]
+        (if text
+          (do (with-release [encoding (api/encode tzr text)]
+                (>!! ids-chan (ids encoding)) )
+              (recur (<!! text-chan)))
+          (close! ids-chan)))))
+   ids-chan)
+  ([tokenizer-provider text-chan]
+   (async-encoder text-chan (chan 16))))
 
-(defn pad-id [config]
-  "TODO")
-
-(defn async-encoder [tokenizer-provider text-chan ids-chan]
-  (io-thread
-   (with-release [tzr (api/tokenizer tokenizer-provider)]
-     (loop [text (<!! text-chan)]
-       (when text
-         (with-release [encoding (api/encode tzr text)]
-           (>!! ids-chan (ids encoding)))
-         (recur (<!! text-chan)))))))
-
-(defn async-decoder [tokenizer-provider id-chan text-chan]
-  (io-thread
-   (let [decoder ((api/tokenizer tokenizer-provider))]
-     (loop [id (<!! id-chan)]
-       (when id
-         (when-let [decoded-part (decoder id)]
-           (when-not (= "" decoded-part)
-             (>!! text-chan decoded-part)))
-         (recur (<!! id-chan)))))))
+(defn async-decoder
+  ([tokenizer-provider id-chan text-chan]
+   (io-thread
+    (let [decoder ((api/tokenizer tokenizer-provider))]
+      (loop [id (<!! id-chan)]
+        (if id
+          (do (when-let [decoded-part (decoder id)]
+                (when-not (= "" decoded-part)
+                  (>!! text-chan decoded-part) ))
+              (recur (<!! id-chan)))
+          (close! text-chan)))))
+   text-chan)
+  ([tokenizer-provider id-chan]
+   (async-decoder id-chan (chan 4096))))
 
 (defn encoder
   ([]

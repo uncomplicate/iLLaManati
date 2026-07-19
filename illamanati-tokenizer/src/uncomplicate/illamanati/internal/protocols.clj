@@ -9,10 +9,6 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.protocols)
 
-(defprotocol Config
-  (max-length [this])
-  (pad-token [this]))
-
 (defprotocol Encoder
   (encode [this text]))
 

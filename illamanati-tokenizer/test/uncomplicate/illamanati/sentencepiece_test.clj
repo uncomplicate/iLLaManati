@@ -15,6 +15,7 @@
             [uncomplicate.illamanati.tokenizer-test :refer :all]))
 
 (with-release [sp (spp "../data/gemma-3-tokenizer.model")]
+  (test-config sp)
   (test-tokenizer sp)
   (test-streaming-decoder sp)
   (test-vector sp)

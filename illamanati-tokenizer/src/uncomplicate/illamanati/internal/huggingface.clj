@@ -10,7 +10,7 @@
     uncomplicate.illamanati.internal.huggingface
   (:require [clojure.java.io :refer [input-stream copy]]
             [uncomplicate.commons
-             [core :refer [with-release Releaseable]]
+             [core :refer [with-release let-release Releaseable Info]]
              [utils :refer [path dragan-says-ex]]]
             [uncomplicate.fluokitten.core :refer [fmap]]
             [uncomplicate.neanderthal
@@ -27,7 +27,7 @@
            [java.nio ByteBuffer CharBuffer BufferOverflowException]
            [java.nio.charset Charset StandardCharsets CodingErrorAction]
            [clojure.lang IFn AFn]
-           [ai.djl.huggingface.tokenizers HuggingFaceTokenizer Encoding TokenizerConfig]
+           [ai.djl.huggingface.tokenizers HuggingFaceTokenizer Encoding]
            [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]
            [uncomplicate.neanderthal.internal.api IntegerVector IntegerMatrix LayoutNavigator]))
 
@@ -266,7 +266,7 @@
 
 ;; ============== HUF extensions ===============================================
 
-(deftype HFT [^HuggingFaceTokenizer hft decoder-fn]
+(deftype HFT [^HuggingFaceTokenizer hft config decoder-fn]
   java.lang.AutoCloseable
   (close [_]
     (.close hft))
@@ -277,6 +277,11 @@
   api/TokenizerProvider
   (tokenizer [this]
     this)
+  Info
+  (info [_]
+    config)
+  (info [_ info-key]
+    (get config info-key))
   IFn
   (invoke [_ text-or-token-ids]
     (if (or (string? text-or-token-ids) (string? (first text-or-token-ids)))
@@ -291,13 +296,26 @@
   (encode [this text]
     (encode text hft)))
 
+(defn build-config [^HuggingFaceTokenizer hft]
+  (with-release [text "<pad><eos><bos><unk><mask>[multimodal]"
+                 enc (.encode hft text false false)
+                 ids ^longs (api/ids enc)]
+    {:pad (aget ids 0)
+     :eos (aget ids 1)
+     :bos (aget ids 2)
+     :unk (aget ids 3)
+     :mask (aget ids 4)
+     :multimodal (aget ids 5)}))
+
 (defn hft [source]
   (cond
     (bytes? source)
-    (->HFT (with-open [is0 (input-stream source)]
-             (HuggingFaceTokenizer/newInstance is0 {"addSpecialTokens" "true"}))
-           (with-open [is1 (input-stream source)]
-             (streaming-decoder is1)))
+    (let-release [hft (with-open [is0 (input-stream source)]
+                        (HuggingFaceTokenizer/newInstance is0 {"addSpecialTokens" "true"}))]
+      (->HFT hft
+             (build-config hft)
+             (with-open [is1 (input-stream source)]
+               (streaming-decoder is1))))
     (instance? InputStream source)
     (with-open [^InputStream stream source]
       (let [baos (ByteArrayOutputStream.)]
@@ -328,8 +346,3 @@
   api/EncodingTokens
   (tokens [this]
     (fmap api/tokens this)))
-
-(extend-type TokenizerConfig
-  api/Config
-  (pad-token [this]
-    (.getPadToken this)))

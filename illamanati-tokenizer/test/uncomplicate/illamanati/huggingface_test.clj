@@ -15,9 +15,8 @@
             [uncomplicate.illamanati.tokenizer-test :refer :all])
   (:import ai.djl.huggingface.tokenizers.TokenizerConfig))
 
-;;(def tokconf (TokenizerConfig/load (path "data/gemma-3-4b-pt" "tokenizer_config.json")))
-
 (with-release [hf (hft "data/gemma-3-4b-pt/tokenizer.json")]
+  (test-config hf)
   (test-tokenizer hf)
   (test-streaming-decoder hf)
   (test-vector hf)

@@ -12,11 +12,18 @@
             [clojure.core.async :refer [chan io-thread >!! <!! poll! timeout alts!!]]
             [clojure.core.async.flow :as flow :refer [create-flow start resume stop inject process]]
             [clojure.string :refer [join]]
-            [uncomplicate.commons.core :refer [with-release]]
+            [uncomplicate.commons.core :refer [with-release info]]
             [uncomplicate.neanderthal
              [core :refer [vctr ge zero cols rows]]
              [native :refer [lv iv native-long]]]
             [uncomplicate.illamanati.tokenizer :refer :all]))
+
+(defn test-config [tzr]
+  (facts "Tzr config test."
+         (info tzr :pad) => 0
+         (info tzr :eos) => 1
+         (info tzr :bos) => 2
+         (info tzr :unk) => 3))
 
 (defn test-tokenizer [tokenizer]
   (facts "Tokenizer Hello World."
@@ -25,9 +32,7 @@
            (take 3 (ids encoding)) => [9259 236764 147224]
            (tokens encoding) => ["Hello" "," "▁Gemma" "!" "▁How" "▁is" "▁the" "▁weather" "▁in" "▁Belgrade" "?"]
            (seq (tokenizer input)) => (seq (ids encoding))
-           (tokenizer (ids encoding)) => "Hello, Gemma! How is the weather in Belgrade?"
-           ;; (pad-token tokconf) => "<pad>"
-           )))
+           (tokenizer (ids encoding)) => "Hello, Gemma! How is the weather in Belgrade?")))
 
 (defn test-streaming-decoder [tokenizer]
   (facts "Streaming decoder test."
