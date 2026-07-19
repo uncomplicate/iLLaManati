@@ -33,7 +33,7 @@
                            tensor-dimensions*]]
              [model :refer [create-tz tensor-desc]]]
             [uncomplicate.illamanati.internal.onnxrt.inference :refer [text-model embedding-model]]
-            [uncomplicate.illamanati.tokenizer :refer [TokenizerProvider]]
+            [uncomplicate.illamanati.internal.protocols :refer [TokenizerProvider]]
             [uncomplicate.illamanati.internal.sentencepiece :refer [spp]]
             [uncomplicate.snapdragan :refer [sampler]]
             [uncomplicate.snapdragan.cuda :refer []])
@@ -91,7 +91,7 @@
        (override-dimension! "image_length" 0)
        (graph-optimization! :all))))
 
-(deftype Gemma3 [fact tensor-desc create-tz
+(deftype Gemma3 [fact tok tensor-desc create-tz
                  mem-info embedding-model! text-model! sample!
                  ^long batch-size] ;;TODO rename to model-agnostic name and generalize
   Releaseable
@@ -103,6 +103,9 @@
   DiamondFactoryProvider
   (diamond-factory [_]
     fact)
+  TokenizerProvider
+  (tokenizer [_]
+    tok)
   Transfer
   (input [_]
     (input embedding-model!))
@@ -159,9 +162,7 @@
         (embedding-model! onnx-ids onnx-image-features onnx-embeds)
         (entry! (view-vctr mask) 1)
         (text-model! embeds onnx-embeds mask onnx-mask position-ids onnx-position-ids logits onnx-logits)
-        (let [res (sample! arg)]
-          (uncomplicate.clojurecuda.core/synchronize! (flow fact));;TODO remove this as it is a leftover from previous tests
-          res))))
+        (sample! arg))))
   (invoke [_ arg]
     (embedding-model!)
     (text-model!)
@@ -210,8 +211,9 @@
                    gemma-3-text (text-model fact mem-info text-sess text-opt
                                             text-inputs text-outputs
                                             (output gemma-3-embedding) context-len)
-                   sample (argmax-sampler (output gemma-3-text) (input gemma-3-embedding))]
-       (->Gemma3 fact
+                   sample (argmax-sampler (output gemma-3-text) (input gemma-3-embedding))
+                   tok (spp (format "%s/%s" model-path (:tokenizer gemma-3-cpu-default)))]
+       (->Gemma3 fact tok
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
                  mem-info
                  gemma-3-embedding gemma-3-text sample
@@ -266,9 +268,10 @@
                    gemma-3-text (text-model fact mem-info sess-text text-opt
                                             text-inputs text-outputs
                                             (output gemma-3-embedding) context-len)
-                   sample (sampler (.ge-decode-logits gemma-3-text) (view-vctr (input gemma-3-embedding)))];;tODO reflection
+                   sample (sampler (.ge-decode-logits gemma-3-text) (view-vctr (input gemma-3-embedding)))
+                   tok (spp (format "%s/%s" model-path (:tokenizer gemma-3-cpu-default)))];;tODO reflection
        (gemma-3-embedding)
-       (->Gemma3 fact
+       (->Gemma3 fact tok
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
                  mem-info gemma-3-embedding gemma-3-text sample
                  batch-size))))

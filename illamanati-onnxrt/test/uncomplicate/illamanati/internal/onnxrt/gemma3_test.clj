@@ -23,7 +23,7 @@
                            execution-mode! memory-info cpu-mem-arena! inter-op-threads! intra-op-threads!
                            onnx-tensor]]
              [model :refer [tensor-desc create-tz]]]
-            [uncomplicate.illamanati.tokenizer :refer [tokenizer encode decoder ids]]
+            [uncomplicate.illamanati.internal.protocols :refer [tokenizer]]
             [uncomplicate.illamanati.internal.onnxrt
              [inference :refer [embedding-model text-model]]
              [gemma3 :refer [gemma-3-cpu argmax-sampler]]]))
@@ -144,13 +144,13 @@
                                                  :context-len 12
                                                  :batch-size 1})
                gemma-3-tokenizer (tokenizer gemma-3!)
-               encoding (encode gemma-3-tokenizer text-input);;TODO this could be function (gemma-3-tokenizer text-input) => encode
-               st (decoder gemma-3-tokenizer)] ;;TODO (gemma-3-tokenizer) => gives the decoder
+               ids (cons 2 (gemma-3-tokenizer text-input))
+               st (gemma-3-tokenizer)]
   (facts
     "ONNX Gemma3 inference test."
     (println "----------------- prefill starts ------------------")
-    (count (ids encoding)) => 6
-    (st (first (time (gemma-3! (ids encoding) nil)))) => " and"
+    (count ids) => 6
+    (st (first (time (gemma-3! ids nil)))) => " and"
     (println "----------------- prefill ends ------------------")
     (println "----------------- decode starts ------------------")
     (st (first (time (gemma-3! nil)))) => " largest"
