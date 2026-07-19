@@ -224,8 +224,8 @@
    (gemma-3-cpu model-path nil)))
 
 (defn gemma-3-gpu ;;TODO this should be a protocol that dispatches based on factory!
-  ([fact env model-path args]
-   (let [{:keys [batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
+  ([fact model-path args]
+   (let [{:keys [env batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
                  context-len embedding
                  embedding-inputs embedding-outputs text-inputs text-outputs
                  opts]
@@ -275,7 +275,7 @@
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
                  mem-info gemma-3-embedding gemma-3-text sample
                  batch-size))))
-  ([env model-path args]
-   (gemma-3-gpu *diamond-factory* env model-path args))
+  ([model-path args]
+   (gemma-3-gpu *diamond-factory* model-path args))
   ([model-path]
    (gemma-3-gpu model-path nil)))
