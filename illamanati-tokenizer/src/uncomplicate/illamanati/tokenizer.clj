@@ -12,8 +12,8 @@
             [uncomplicate.commons.core :refer [with-release]]
             [uncomplicate.illamanati.internal.protocols :as api]))
 
-(defn encode [tokenizer-provider text]
-  (api/encode (api/tokenizer tokenizer-provider) text))
+(defn encode [tok text]
+  (api/encode tok text))
 
 (defn ids [encoding]
   (seq (api/ids encoding)))
@@ -22,23 +22,22 @@
   (seq (api/tokens encoding)))
 
 (defn async-encoder
-  ([tokenizer-provider text-chan ids-chan]
+  ([tokenizer text-chan ids-chan]
    (io-thread
-    (with-release [tzr (api/tokenizer tokenizer-provider)]
-      (loop [text (<!! text-chan)]
-        (if text
-          (do (with-release [encoding (api/encode tzr text)]
-                (>!! ids-chan (ids encoding)) )
-              (recur (<!! text-chan)))
-          (close! ids-chan)))))
+    (loop [text (<!! text-chan)]
+      (if text
+        (do (with-release [encoding (api/encode tokenizer text)]
+              (>!! ids-chan (ids encoding)) )
+            (recur (<!! text-chan)))
+        (close! ids-chan))))
    ids-chan)
-  ([tokenizer-provider text-chan]
-   (async-encoder text-chan (chan 16))))
+  ([tokenizer text-chan]
+   (async-encoder tokenizer text-chan (chan))))
 
 (defn async-decoder
-  ([tokenizer-provider id-chan text-chan]
+  ([tokenizer id-chan text-chan]
    (io-thread
-    (let [decoder ((api/tokenizer tokenizer-provider))]
+    (let [decoder (tokenizer)]
       (loop [id (<!! id-chan)]
         (if id
           (do (when-let [decoded-part (decoder id)]
@@ -47,16 +46,16 @@
               (recur (<!! id-chan)))
           (close! text-chan)))))
    text-chan)
-  ([tokenizer-provider id-chan]
-   (async-decoder id-chan (chan 4096))))
+  ([tokenizer id-chan]
+   (async-decoder tokenizer id-chan (chan))))
 
 (defn encoder
   ([]
-   {:params {:tokenizer "Tokenizer Provider"}
+   {:params {:tokenizer "Tokenizer"}
     :ins {:in "Text"}
     :outs {:out "Token ids"}})
   ([args]
-   (api/tokenizer (:tokenizer args)))
+   (:tokenizer args))
   ([tokenizer _]
    tokenizer)
   ([tokenizer _ text]
@@ -65,11 +64,11 @@
 
 (defn decoder
   ([]
-   {:params {:tokenizer "Tokenizer Provider"}
+   {:params {:tokenizer "Tokenizer"}
     :ins {:in "Token id"}
     :outs {:out "Token text"}})
   ([args]
-   ((api/tokenizer (:tokenizer args))))
+   ((:tokenizer args)))
   ([decoder _]
    decoder)
   ([decoder _ id]

@@ -9,7 +9,7 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.gemma3
   (:require [uncomplicate.commons
-             [core :refer [let-release with-release Releaseable release Info size sizeof
+             [core :refer [let-release with-release Releaseable release Info info size sizeof
                            releaseable view]]
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer get-entry position! long-pointer put-entry!]]
@@ -24,7 +24,7 @@
              [constants :refer [onnx-data-type-pointer]]
              [core :as onnx
               :refer [graph-optimization! cpu-mem-arena! execution-mode! spin-control! denormal-as-zero! inter-op-threads! intra-op-threads! config!
-                      threading-options session memory-info onnx-tensor
+                      threading-options session memory-info onnx-tensor environment
                       io-binding input-count output-count cast-type value-tensor-info
                       input-type-info output-type-info tensor-type
                       bind-input! bind-output! runner* options override-dimension! free mutable-data
@@ -91,7 +91,8 @@
        (override-dimension! "image_length" 0)
        (graph-optimization! :all))))
 
-(deftype Gemma3 [fact tok tensor-desc create-tz
+(deftype Gemma3 [fact config-info
+                 tensor-desc create-tz
                  mem-info embedding-model! text-model! sample!
                  ^long batch-size] ;;TODO rename to model-agnostic name and generalize
   Releaseable
@@ -100,12 +101,14 @@
     (release embedding-model!)
     (release sample!)
     (release mem-info))
+  Info
+  (info [_]
+    config-info)
+  (info [_ info-key]
+    (config-info info-key))
   DiamondFactoryProvider
   (diamond-factory [_]
     fact)
-  TokenizerProvider
-  (tokenizer [_]
-    tok)
   Transfer
   (input [_]
     (input embedding-model!))
@@ -186,38 +189,41 @@
 
 (defn gemma-3-cpu
   ([fact model-path args]
-   (let [{:keys [env batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
-                 context-len embedding
-                 embedding-inputs embedding-outputs text-inputs text-outputs]
-          :or {batch-size 1}
-          } (into gemma-3-cpu-default args)
-         vect-fact (neanderthal-factory fact)]
-     (let-release [;; threading-opts (-> (threading-options)
-                   ;;                    (denormal-as-zero!)
-                   ;;                    (spin-control! true))
-                   embedding-opt (universal-options! (-> (options)
-                                                         (intra-op-threads! 10)
-                                                         (inter-op-threads! 1))
-                                                     batch-size)
-                   text-opt (universal-options! (-> (options)
-                                                    (intra-op-threads! 10)
-                                                    (inter-op-threads! 1))
-                                                batch-size)
-                   embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
-                   text-sess (session env (format "%s/%s" model-path gemma-3-text) text-opt)
-                   mem-info (memory-info (device (neanderthal-factory fact :float)) :device :default)
-                   gemma-3-embedding (embedding-model fact mem-info embedding-sess embedding-opt
-                                                      embedding-inputs embedding-outputs)
-                   gemma-3-text (text-model fact mem-info text-sess text-opt
-                                            text-inputs text-outputs
-                                            (output gemma-3-embedding) context-len)
-                   sample (argmax-sampler (output gemma-3-text) (input gemma-3-embedding))
-                   tok (spp (format "%s/%s" model-path (:tokenizer gemma-3-cpu-default)))]
-       (->Gemma3 fact tok
-                 (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
-                 mem-info
-                 gemma-3-embedding gemma-3-text sample
-                 batch-size))))
+   (let-release [tok (spp (format "%s/%s" model-path (:tokenizer gemma-3-cpu-default)))]
+     (let [{:keys [batch-size hidden-size vocab-size gemma-3-embedding gemma-3-text
+                   context-len embedding
+                   embedding-inputs embedding-outputs text-inputs text-outputs]
+            :or {batch-size 1}
+            :as config
+            } (into gemma-3-cpu-default args)
+           vect-fact (neanderthal-factory fact)
+           config-info (into (info tok) (select-keys config [:vocab-size :context-len :batch size]))]
+       (let-release [;; threading-opts (-> (threading-options)
+                     ;;                    (denormal-as-zero!)
+                     ;;                    (spin-control! true))
+                     env (environment)
+                     embedding-opt (universal-options! (-> (options)
+                                                           (intra-op-threads! 10)
+                                                           (inter-op-threads! 1))
+                                                       batch-size)
+                     text-opt (universal-options! (-> (options)
+                                                      (intra-op-threads! 10)
+                                                      (inter-op-threads! 1))
+                                                  batch-size)
+                     embedding-sess (session env (format "%s/%s" model-path gemma-3-embedding) embedding-opt)
+                     text-sess (session env (format "%s/%s" model-path gemma-3-text) text-opt)
+                     mem-info (memory-info (device (neanderthal-factory fact :float)) :device :default)
+                     gemma-3-embedding (embedding-model fact mem-info embedding-sess embedding-opt
+                                                        embedding-inputs embedding-outputs)
+                     gemma-3-text (text-model fact mem-info text-sess text-opt
+                                              text-inputs text-outputs
+                                              (output gemma-3-embedding) context-len)
+                     sample (argmax-sampler (output gemma-3-text) (input gemma-3-embedding))]
+         (->Gemma3 fact config-info
+                   (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
+                   mem-info
+                   gemma-3-embedding gemma-3-text sample
+                   batch-size)))))
   ([model-path args]
    (gemma-3-cpu *diamond-factory* model-path args))
   ([model-path]
@@ -230,6 +236,7 @@
                  embedding-inputs embedding-outputs text-inputs text-outputs
                  opts]
           :or {batch-size 1}
+          :as config-info
           } (into gemma-3-gpu-default args)
          vect-fact (neanderthal-factory fact)]
      (let-release [;; threading-opts (-> (threading-options)
@@ -268,10 +275,9 @@
                    gemma-3-text (text-model fact mem-info sess-text text-opt
                                             text-inputs text-outputs
                                             (output gemma-3-embedding) context-len)
-                   sample (sampler (.ge-decode-logits gemma-3-text) (view-vctr (input gemma-3-embedding)))
-                   tok (spp (format "%s/%s" model-path (:tokenizer gemma-3-cpu-default)))];;tODO reflection
+                   sample (sampler (.ge-decode-logits gemma-3-text) (view-vctr (input gemma-3-embedding)))];;tODO reflection
        (gemma-3-embedding)
-       (->Gemma3 fact tok
+       (->Gemma3 fact config-info
                  (partial tensor-desc fact vect-fact) (partial create-tz fact vect-fact)
                  mem-info gemma-3-embedding gemma-3-text sample
                  batch-size))))

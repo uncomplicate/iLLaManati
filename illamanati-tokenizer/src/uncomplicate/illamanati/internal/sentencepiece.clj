@@ -229,9 +229,6 @@
   (release [_]
     (.close processor)
     true)
-  api/TokenizerProvider
-  (tokenizer [this]
-    this)
   IFn
   (invoke [_ text-or-token-ids]
     (if (or (string? text-or-token-ids) (string? (first text-or-token-ids)))

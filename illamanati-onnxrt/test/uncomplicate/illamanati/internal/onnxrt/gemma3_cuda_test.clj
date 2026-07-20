@@ -145,35 +145,6 @@
           ;; (sample! 1.0) => :g
           )))))
 
-;; (def env (environment :verbose (name (gensym "illamanati_onnxrt_"))))
-;; (def model-path "../data/Gemma-3-ONNX/gemma-3-4b-it")
-;; (def tokenizer (gemma-3-tokenizer model-path));;TODO THIS causes CUDA troubles, probably by messing up loaded libraries. Moreover, even the CUDA EP warmup only postponest the crash, which happens after a few turns. I have to replace DJL tokenizer with something else!
-;; (def text-input "Belgrade is the capital")
-;; (def encoding (encode tokenizer1 text-input))
-;; (def st (decoder tokenizer1))
-
-;; (let [st identity
-;;       ]
-;;   (with-default
-;;     (reset-context! (device))
-;;     (binding [*headers* {"cuda_fp16.h" nil}]
-;;       (with-diamond cuda-factory []
-;;         (with-release [gemma-3! (gemma-3-gpu env model-path {:context-len 26
-;;                                                              :batch-size 1})]
-;;           (facts
-;;             "ONNX Gemma3 inference test."
-;;             (println "----------------- prefill starts ------------------")
-;;             ;;(count (ids encoding)) => 6
-;;             (st (first (time (gemma-3! [2 19727 9619 563 506 5279] 1.0)))) => " and"
-;;             (println "----------------- prefill ends ------------------")
-;;             (println "----------------- decode starts ------------------")
-;;             (st (first (time (gemma-3! 1.0)))) => " largest"
-;;             (st (first (time (gemma-3! 1.0)))) => " city"
-;;             (st (first (time (gemma-3! 1.0)))) => " of"
-;;             (st (first (time (gemma-3! 1.0)))) => " Serbia"
-;;             (st (first (time (gemma-3! 1.0)))) => "."
-;;             (println "----------------- decode ends ------------------")))))))
-
 (with-default
   (reset-context! (device))
   (binding [*headers* {"cuda_fp16.h" nil}]

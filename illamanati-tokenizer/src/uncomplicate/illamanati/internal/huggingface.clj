@@ -274,9 +274,6 @@
   (release [_]
     (.close hft)
     true)
-  api/TokenizerProvider
-  (tokenizer [this]
-    this)
   Info
   (info [_]
     config)

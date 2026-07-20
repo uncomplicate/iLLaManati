@@ -9,7 +9,9 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.gemma3-test
   (:require [midje.sweet :refer [facts =>]]
-            [uncomplicate.commons [core :refer [with-release view]]]
+            [clojure.string :refer [join]]
+            [clojure.core.async :refer [chan >!! <!! close!]]
+            [uncomplicate.commons [core :refer [with-release view info]]]
             [uncomplicate.neanderthal
              [core :refer [transfer! entry entry! native view-vctr]]
              [block :refer [buffer]]]
@@ -23,10 +25,11 @@
                            execution-mode! memory-info cpu-mem-arena! inter-op-threads! intra-op-threads!
                            onnx-tensor]]
              [model :refer [tensor-desc create-tz]]]
-            [uncomplicate.illamanati.internal.protocols :refer [tokenizer]]
+            [uncomplicate.illamanati :refer [generator]]
+            [uncomplicate.illamanati.tokenizer :refer [async-encoder async-decoder]]
             [uncomplicate.illamanati.internal.onnxrt
              [inference :refer [embedding-model text-model]]
-             [gemma3 :refer [gemma-3-cpu argmax-sampler]]]))
+             [gemma3 :refer [gemma-3-cpu gemma-3-tokenizer argmax-sampler]]]))
 
 (with-release [vect-fact (neanderthal-factory *diamond-factory*)
                tensor-desc (partial tensor-desc *diamond-factory* vect-fact)
@@ -139,23 +142,37 @@
 
 (with-release [model-path "../data/Gemma-3-ONNX/gemma-3-4b-it"
                text-input "Belgrade is the capital"
-               env (telemetry! (environment :verbose (name (gensym "illamanati_onnxrt_"))))
-               gemma-3! (gemma-3-cpu model-path {:env env
-                                                 :context-len 12
+               gemma-3! (gemma-3-cpu model-path {:context-len 12
                                                  :batch-size 1})
-               gemma-3-tokenizer (tokenizer gemma-3!)
-               ids (cons 2 (gemma-3-tokenizer text-input))
-               st (gemma-3-tokenizer)]
+               tok (gemma-3-tokenizer model-path)
+               ids (cons (info gemma-3! :bos) (tok text-input))
+               st (tok)]
   (facts
     "ONNX Gemma3 inference test."
     (println "----------------- prefill starts ------------------")
     (count ids) => 6
-    (st (first (time (gemma-3! ids nil)))) => " and"
+    (st (first (time (gemma-3! ids 1.0)))) => " and"
     (println "----------------- prefill ends ------------------")
     (println "----------------- decode starts ------------------")
-    (st (first (time (gemma-3! nil)))) => " largest"
-    (st (first (time (gemma-3! nil)))) => " city"
-    (st (first (time (gemma-3! nil)))) => " of"
-    (st (first (time (gemma-3! nil)))) => " Serbia"
-    (st (first (time (gemma-3! nil)))) => "."
+    (st (first (time (gemma-3! 1.0)))) => " largest"
+    (st (first (time (gemma-3! 1.0)))) => " city"
+    (st (first (time (gemma-3! 1.0)))) => " of"
+    (st (first (time (gemma-3! 1.0)))) => " Serbia"
+    (st (first (time (gemma-3! 1.0)))) => "."
     (println "----------------- decode ends ------------------")))
+
+(with-release [model-path "../data/Gemma-3-ONNX/gemma-3-4b-it"
+               prompt "Belgrade is the capital"
+               sp (gemma-3-tokenizer model-path)]
+  (let [prompt-chan (chan)
+        ids-chan (async-encoder sp prompt-chan)
+        id-chan (generator (partial gemma-3-cpu model-path {:context-len 12 :batch-size 1}) ids-chan)
+        text-chan (async-decoder sp id-chan)]
+
+    (facts
+      "ONNX Gemma3 async generator test."
+      (>!! prompt-chan prompt)
+      (<!! text-chan) => " and"
+      (time (join (repeatedly 5 #(<!! text-chan)))) => " largest city of Serbia."
+      (close! prompt-chan)
+      (<!! text-chan) => nil)))
