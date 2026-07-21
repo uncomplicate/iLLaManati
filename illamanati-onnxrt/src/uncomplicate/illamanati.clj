@@ -7,22 +7,7 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns ^{:author "Dragan Djuric"}
-    uncomplicate.illamanati.internal.protocols)
+    uncomplicate.illamanati
+  (:require [uncomplicate.neanderthal.internal.api :refer [device]]))
 
-(defprotocol Encoder
-  (encode [this text]))
-
-(defprotocol EncodingIds
-  (ids [this]))
-
-(defprotocol EncodingTokens
-  (tokens [this]))
-
-(defprotocol TokenizerProvider
-  (tokenizer [this]))
-
-(defprotocol GeneratorProvider
-  (generator [this fact]))
-
-(defprotocol TokenizerProvider
-  (tokenizer [this]))
+(defmulti generator (fn [provider _ _] (device provider)))

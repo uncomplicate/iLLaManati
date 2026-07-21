@@ -279,6 +279,9 @@
     config)
   (info [_ info-key]
     (get config info-key))
+  api/TokenizerProvider
+  (tokenizer [this]
+    this)
   IFn
   (invoke [_ text-or-token-ids]
     (if (or (string? text-or-token-ids) (string? (first text-or-token-ids)))

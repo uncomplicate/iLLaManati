@@ -22,22 +22,23 @@
   (seq (api/tokens encoding)))
 
 (defn async-encoder
-  ([tokenizer text-chan ids-chan]
+  ([provider text-chan ids-chan]
    (io-thread
-    (loop [text (<!! text-chan)]
-      (if text
-        (do (with-release [encoding (api/encode tokenizer text)]
-              (>!! ids-chan (ids encoding)) )
-            (recur (<!! text-chan)))
-        (close! ids-chan))))
+    (let [tok (api/tokenizer provider)]
+      (loop [text (<!! text-chan)]
+        (if text
+          (do (with-release [encoding (api/encode tok text)]
+                (>!! ids-chan (ids encoding)) )
+              (recur (<!! text-chan)))
+          (close! ids-chan)))))
    ids-chan)
-  ([tokenizer text-chan]
-   (async-encoder tokenizer text-chan (chan))))
+  ([provider text-chan]
+   (async-encoder provider text-chan (chan))))
 
 (defn async-decoder
-  ([tokenizer id-chan text-chan]
+  ([provider id-chan text-chan]
    (io-thread
-    (let [decoder (tokenizer)]
+    (let [decoder ((api/tokenizer provider))]
       (loop [id (<!! id-chan)]
         (if id
           (do (when-let [decoded-part (decoder id)]
@@ -55,7 +56,7 @@
     :ins {:in "Text"}
     :outs {:out "Token ids"}})
   ([args]
-   (:tokenizer args))
+   (api/tokenizer (:tokenizer args)))
   ([tokenizer _]
    tokenizer)
   ([tokenizer _ text]
@@ -68,7 +69,7 @@
     :ins {:in "Token id"}
     :outs {:out "Token text"}})
   ([args]
-   ((:tokenizer args)))
+   ((api/tokenizer (:tokenizer args))))
   ([decoder _]
    decoder)
   ([decoder _ id]

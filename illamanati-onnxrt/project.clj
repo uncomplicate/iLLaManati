@@ -24,7 +24,7 @@
                                     [org.uncomplicate/neanderthal-mkl "0.64.0"]
                                     [org.bytedeco/mkl "2025.3-1.5.13" :classifier "linux-x86_64-redist"]
                                     [org.uncomplicate/deep-diamond-cuda "0.46.0"]
-                                    [org.uncomplicate/snapdragan-cuda "0.5.0-SNAPSHOT"]
+                                    [org.uncomplicate/snapdragan-cuda "0.7.0-SNAPSHOT"]
                                     [org.bytedeco/cuda-platform "13.2-9.21-1.5.14-SNAPSHOT"]
                                     [org.bytedeco/cuda-redist "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-cublas "13.2-9.21-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
@@ -38,7 +38,7 @@
                                       [org.bytedeco/cuda-redist-cublas "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
                                       [org.bytedeco/cuda-redist-cudnn "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
                                       [org.bytedeco/cuda-redist-nccl "13.2-9.21-1.5.14-SNAPSHOT" :classifier "windows-x86_64"]
-                                      [org.uncomplicate/snapdragan-cuda "0.2.0-SNAPSHOT"]]}
+                                      [org.uncomplicate/snapdragan-cuda "0.7.0-SNAPSHOT"]]}
              :macosx {:dependencies [[org.uncomplicate/neanderthal-accelerate "0.64.0"]
                                      [org.bytedeco/openblas "0.3.31-1.5.13" :classifier "macosx-arm64"]]}}
 

@@ -28,11 +28,15 @@
              [model :refer [tensor-desc create-tz]]]
             [uncomplicate.snapdragan :refer [sampler]]
             [uncomplicate.snapdragan.cuda :refer []]
+            [uncomplicate.illamanati.cuda :refer []]
             [uncomplicate.illamanati.internal.protocols :refer [tokenizer]]
-            [uncomplicate.illamanati.internal.onnxrt.inference :refer [embedding-model text-model]]
-            [uncomplicate.illamanati.internal.onnxrt.gemma3 :refer [gemma-3-gpu]]))
+            [uncomplicate.illamanati.internal.onnxrt
+             [inference :refer [embedding-model text-model]]
+             [gemma3 :refer [gemma-3-gpu-default gemma-3]]]
+            [uncomplicate.illamanati.internal.onnxrt.gemma3-test
+             :refer [test-generator test-async-generator]]))
 
-(with-default
+#_(with-default
   (reset-context! (device))
   (binding [*headers* {"cuda_fp16.h" nil}]
     (with-diamond cuda-factory []
@@ -145,7 +149,7 @@
           ;; (sample! 1.0) => :g
           )))))
 
-(with-default
+#_(with-default
   (reset-context! (device))
   (binding [*headers* {"cuda_fp16.h" nil}]
     (with-diamond cuda-factory []
@@ -171,3 +175,14 @@
           (st (first (time (gemma-3! 1.0)))) => " Serbia"
           (st (first (time (gemma-3! 1.0)))) => "."
           (println "----------------- decode ends ------------------"))))))
+
+
+(with-default
+  (reset-context! (device))
+  (binding [*headers* {"cuda_fp16.h" nil}]
+    (with-diamond cuda-factory []
+      (test-generator gemma-3-gpu-default))))
+
+(with-default
+  ;;(reset-context! (device))
+  (test-async-generator gemma-3-gpu-default))

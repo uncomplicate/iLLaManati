@@ -219,16 +219,14 @@
   (info [_]
     config)
   (info [_ info-key]
-    (case info-key
-      :pad (.pad_id processor)
-      :eos (.eos_id processor)
-      :bos (.bos_id processor)
-      :unk (.unk_id processor)
-      (get config info-key)))
+    (get config info-key))
   Releaseable
   (release [_]
     (.close processor)
     true)
+  api/TokenizerProvider
+  (tokenizer [this]
+    this)
   IFn
   (invoke [_ text-or-token-ids]
     (if (or (string? text-or-token-ids) (string? (first text-or-token-ids)))
