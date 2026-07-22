@@ -8,8 +8,11 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.core
-  (:require [clojure.core.async :refer [<!! >!! io-thread thread alt!! close! chan]]
-            [uncomplicate.commons.core :refer [with-release info]]))
+  (:require [clojure.core.async :refer [<!! >!! alt!! close! chan thread]]
+            [uncomplicate.commons.core :refer [with-release let-release info]]
+            [uncomplicate.neanderthal.internal.api :refer [device]]
+            [uncomplicate.diamond.tensor :refer [*diamond-factory*]]
+            [uncomplicate.illamanati.internal.protocols :as api]))
 
 (defn generator-loop [eos bos context-len generator! in-chan tok-chan]
   (with-release [generator! generator!]
@@ -25,3 +28,15 @@
                                        (alt!! in-chan ([signal] signal)
                                               :default (first (generator! arg))))
               :default (close! tok-chan))))))
+
+(defmulti generator (fn [provider _ _] (device provider)))
+
+(defmethod generator :default [provider in-chan tok-chan]
+  (let-release [generator! (api/generator provider *diamond-factory*)]
+    (thread (generator-loop (info provider :eos)
+                            (info provider :bos)
+                            (info provider :context-len)
+                            generator!
+                            in-chan
+                            tok-chan)))
+  tok-chan)

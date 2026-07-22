@@ -8,6 +8,12 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati
-  (:require [uncomplicate.neanderthal.internal.api :refer [device]]))
+  (:require [clojure.core.async :refer [chan]]
+            [uncomplicate.illamanati.internal.core :refer [generator]]))
 
-(defmulti generator (fn [provider _ _] (device provider)))
+(defn async-generator
+  ([provider in-chan tok-chan]
+   (generator provider in-chan tok-chan)
+   tok-chan)
+  ([provider in-chan]
+   (async-generator provider in-chan (chan))))

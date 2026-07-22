@@ -31,8 +31,8 @@
             [uncomplicate.illamanati.cuda :refer []]
             [uncomplicate.illamanati.internal.protocols :refer [tokenizer]]
             [uncomplicate.illamanati.internal.onnxrt
-             [inference :refer [embedding-model decoder-model]]
-             [gemma3 :refer [gemma-3-gpu-default token-generator]]]
+             [inference :refer [embedding-model decoder-model token-generator]]
+             [gemma3 :refer [gemma-3-gpu-default]]]
             [uncomplicate.illamanati.internal.onnxrt.gemma3-test
              :refer [test-generator test-async-generator]]))
 
@@ -184,5 +184,4 @@
       (test-generator gemma-3-gpu-default))))
 
 (with-default
-  ;;(reset-context! (device))
   (test-async-generator gemma-3-gpu-default))

@@ -8,27 +8,39 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.cuda
-  (:require [uncomplicate.commons.core :refer [let-release info]]
+  (:require [clojure.core.async :refer [thread io-thread <!!]]
+            [uncomplicate.commons.core :refer [let-release info release]]
             [uncomplicate.clojurecuda.core :refer [*headers* current-context in-context]]
+            [uncomplicate.neanderthal.internal.api :refer [device]]
+            [uncomplicate.diamond.internal.protocols :refer [neanderthal-factory]]
             [uncomplicate.diamond
-             [tensor :refer [with-diamond]]
+             [tensor :refer [*diamond-factory*]]
              [cuda :refer [cuda-factory]]]
             [uncomplicate.snapdragan.cuda :refer []]
-            [uncomplicate.illamanati :refer [generator]]
-            [uncomplicate.illamanati.internal.core :refer [generator-loop]]
+            [uncomplicate.illamanati.internal.core :refer [generator-loop generator]]
             [uncomplicate.illamanati.internal.protocols :as api]))
 
+(defn cuda-generator
+  ([fact provider in-chan tok-chan]
+   (let-release [generator! (api/generator provider fact)]
+     (thread (binding [*diamond-factory* fact]
+               (in-context (.-ctx fact);;TODO reflection
+                 (generator-loop (info provider :eos)
+                                 (info provider :bos)
+                                 (info provider :context-len)
+                                 generator!
+                                 in-chan
+                                 tok-chan))
+               fact))))
+  ([provider in-chan tok-chan]
+   (let [fact *diamond-factory*]
+     (if (and fact (= :cuda (device (neanderthal-factory fact :float))))
+       (cuda-generator fact provider in-chan tok-chan)
+       (let-release [fact (cuda-factory)]
+         (let [release-fact (cuda-generator fact provider in-chan tok-chan)]
+           (io-thread (release (<!! release-fact))
+                      provider)))))))
+
 (defmethod generator :cuda [provider in-chan tok-chan]
-  (binding [*headers* {"cuda_fp16.h" nil}]
-    (let-release [fact (cuda-factory)
-                  generator! (api/generator provider fact)]
-      (let [ctx (current-context)]
-        (fn []
-          (with-diamond identity [fact]
-            (in-context ctx
-              (generator-loop (info provider :eos)
-                              (info provider :bos)
-                              (info provider :context-len)
-                              generator!
-                              in-chan
-                              tok-chan))))))))
+  (cuda-generator provider in-chan tok-chan)
+  tok-chan)

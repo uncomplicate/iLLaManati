@@ -26,8 +26,7 @@
                            onnx-tensor]]
              [model :refer [tensor-desc create-tz]]]
             [uncomplicate.snapdragan :refer [sampler]]
-            [uncomplicate.illamanati :refer [generator]]
-            [uncomplicate.illamanati.native :refer []]
+            [uncomplicate.illamanati :refer [async-generator]]
             [uncomplicate.illamanati.tokenizer :refer [async-encoder async-decoder]]
             [uncomplicate.illamanati.internal.protocols :as api]
             [uncomplicate.illamanati.internal.onnxrt
@@ -176,13 +175,11 @@
                                                             {:context-len 12}))]
     (let [prompt-chan (chan)
           ids-chan (async-encoder provider prompt-chan)
-          id-chan (chan)
-          gen-loop (generator provider ids-chan id-chan)
+          id-chan (async-generator provider ids-chan)
           text-chan (async-decoder provider id-chan)]
 
       (facts
         "ONNX Gemma3 async generator test."
-        (thread (gen-loop))
         (>!! prompt-chan prompt)
         (<!! text-chan) => " and"
         (time (join (repeatedly 5 #(<!! text-chan)))) => " largest city of Serbia."

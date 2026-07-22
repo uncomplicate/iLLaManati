@@ -9,7 +9,7 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.inference
   (:require [uncomplicate.commons
-             [core :refer [let-release with-release Releaseable release Info info size view]]
+             [core :refer [let-release with-release Releaseable release Info info sizeof view]]
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer]]
             [uncomplicate.neanderthal
@@ -581,7 +581,7 @@
   (tokenizer [this]
     tok))
 
-(defn token-generator
+(defn token-generator;;TODO move to onnx? and call it TokenGenerator factory?
   ([model-path args]
    (let-release [tok (let [[tokenizer model-file] (:tokenizer args)]
                        (tokenizer (format "%s/%s" model-path model-file)))]
