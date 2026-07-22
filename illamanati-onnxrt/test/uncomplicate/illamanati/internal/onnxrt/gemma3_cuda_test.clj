@@ -31,8 +31,8 @@
             [uncomplicate.illamanati.cuda :refer []]
             [uncomplicate.illamanati.internal.protocols :refer [tokenizer]]
             [uncomplicate.illamanati.internal.onnxrt
-             [inference :refer [embedding-model text-model]]
-             [gemma3 :refer [gemma-3-gpu-default gemma-3]]]
+             [inference :refer [embedding-model decoder-model]]
+             [gemma3 :refer [gemma-3-gpu-default token-generator]]]
             [uncomplicate.illamanati.internal.onnxrt.gemma3-test
              :refer [test-generator test-async-generator]]))
 
@@ -111,7 +111,7 @@
                      gemma-3-embedding! (embedding-model mem-info sess-embedding opt
                                                          ["input_ids" "image_features"]
                                                          ["inputs_embeds"])
-                     gemma-3-text! (text-model mem-info sess-text opt
+                     gemma-3-text! (decoder-model mem-info sess-text opt
                                                ["inputs_embeds" "attention_mask" "position_ids"]
                                                ["logits"]  (output gemma-3-embedding!) 16)
                      sample! (sampler (.-ge-decode-logits gemma-3-text!) (view-vctr (input gemma-3-embedding!)))]

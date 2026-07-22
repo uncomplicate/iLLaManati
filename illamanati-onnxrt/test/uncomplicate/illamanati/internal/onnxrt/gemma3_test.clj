@@ -31,8 +31,8 @@
             [uncomplicate.illamanati.tokenizer :refer [async-encoder async-decoder]]
             [uncomplicate.illamanati.internal.protocols :as api]
             [uncomplicate.illamanati.internal.onnxrt
-             [inference :refer [embedding-model text-model]]
-             [gemma3 :refer [gemma-3 gemma-3-cpu-default gemma-3-gpu-default]]]))
+             [inference :refer [embedding-model decoder-model token-generator]]
+             [gemma3 :refer [gemma-3-cpu-default]]]))
 
 (with-release [vect-fact (neanderthal-factory *diamond-factory*)
                tensor-desc (partial tensor-desc *diamond-factory* vect-fact)
@@ -123,7 +123,7 @@
                gemma-3-embedding! (embedding-model mem-info sess-embedding opt
                                                    ["input_ids" "image_features"]
                                                    ["inputs_embeds"])
-               gemma-3-text! (text-model mem-info sess-text opt-text
+               gemma-3-text! (decoder-model mem-info sess-text opt-text
                                          ["inputs_embeds" "attention_mask"]
                                          ["logits"] (output gemma-3-embedding!) 12)
                sample! (sampler (view-vctr (output gemma-3-text!))
@@ -147,8 +147,8 @@
 (defn test-generator [config]
   (with-release [model-path "../data/Gemma-3-ONNX/gemma-3-4b-it"
                  text-input "Belgrade is the capital"
-                 provider (gemma-3 model-path (into config
-                                                    {:context-len 12}))
+                 provider (token-generator model-path (into config
+                                                            {:context-len 12}))
                  gen (api/generator provider *diamond-factory*)
                  tok (api/tokenizer provider)
                  ids (cons (info tok :bos) (tok text-input))
@@ -172,8 +172,8 @@
 (defn test-async-generator [config]
   (with-release [model-path "../data/Gemma-3-ONNX/gemma-3-4b-it"
                  prompt "Belgrade is the capital"
-                 provider (gemma-3 model-path (into config
-                                                    {:context-len 12}))]
+                 provider (token-generator model-path (into config
+                                                            {:context-len 12}))]
     (let [prompt-chan (chan)
           ids-chan (async-encoder provider prompt-chan)
           id-chan (chan)
