@@ -7,7 +7,7 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns ^{:author "Dragan Djuric"}
-    uncomplicate.illamanati.internal.sentencepiece
+    uncomplicate.illamanati.internal.tokenizer.sentencepiece
   (:require [clojure.java.io :refer [input-stream]]
             [uncomplicate.commons
              [core :refer [with-release Releaseable release size Info]]
@@ -16,9 +16,9 @@
             [uncomplicate.neanderthal
              [core :refer [dim]]
              [integer :refer [entry]]]
-            [uncomplicate.illamanati.internal
-             [protocols :as api]
-             [streaming-decoder :refer [streaming-decoder sentencepiece-lookup]]])
+            [uncomplicate.illamanati.internal.protocols :as api]
+            [uncomplicate.illamanati.internal.tokenizer.streaming-decoder
+             :refer [streaming-decoder sentencepiece-lookup]])
   (:import [clojure.lang IFn AFn Seqable]
            [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]
            [org.bytedeco.sentencepiece SentencePieceProcessor Status IntVector StringVector]

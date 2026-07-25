@@ -7,7 +7,7 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns ^{:author "Dragan Djuric"}
-    uncomplicate.illamanati.internal.array-conversion
+    uncomplicate.illamanati.internal.tokenizer.array-conversion
   (:require [uncomplicate.clojure-cpp
              :refer [pointer long-pointer int-pointer limit memcpy! get!
                      put! byte-pointer get-int put-int! get-short]])

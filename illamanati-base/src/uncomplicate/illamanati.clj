@@ -7,19 +7,12 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns ^{:author "Dragan Djuric"}
-    uncomplicate.illamanati.tokenizer
+    uncomplicate.illamanati
   (:require [clojure.core.async :refer [<!! >!! io-thread chan close!]]
             [uncomplicate.commons.core :refer [with-release]]
-            [uncomplicate.illamanati.internal.protocols :as api]))
-
-(defn encode [tok text]
-  (api/encode tok text))
-
-(defn ids [encoding]
-  (seq (api/ids encoding)))
-
-(defn tokens [encoding]
-  (seq (api/tokens encoding)))
+            [uncomplicate.illamanati.internal
+             [protocols :as api]
+             [core :refer []]]))
 
 (defn async-encoder
   ([provider text-chan ids-chan]
@@ -28,7 +21,7 @@
       (loop [text (<!! text-chan)]
         (if text
           (do (with-release [encoding (api/encode tok text)]
-                (>!! ids-chan (ids encoding)) )
+                (>!! ids-chan (api/ids encoding)) )
               (recur (<!! text-chan)))
           (close! ids-chan)))))
    ids-chan)
@@ -50,6 +43,13 @@
   ([tokenizer id-chan]
    (async-decoder tokenizer id-chan (chan))))
 
+(defn async-generator
+  ([provider in-chan tok-chan]
+   (api/generator provider in-chan tok-chan)
+   tok-chan)
+  ([provider in-chan]
+   (async-generator provider in-chan (chan))))
+
 (defn encoder
   ([]
    {:params {:tokenizer "Tokenizer"}
@@ -61,7 +61,7 @@
    tokenizer)
   ([tokenizer _ text]
    (with-release [encoding (api/encode tokenizer text)]
-     [tokenizer {:out (ids encoding)}])))
+     [tokenizer {:out (api/ids encoding)}])))
 
 (defn decoder
   ([]
@@ -76,3 +76,14 @@
    [decoder (when-let [decoded-part (decoder id)]
               (when-not (= "" decoded-part)
                 {:out [decoded-part]}))]))
+
+
+;; TODO once the move to onnx-community has been done,  move all code that is optimum-specific from inference to optimum.clj!
+
+;; Another good thing: onnx-community-GQA is the same for GPU and CPU, so this should solve this problem anyway...
+
+;; So, to onnx-community. The good thing is
+;; that their optimum export should produce consistent structure for most models, so I can reuse most of the code.
+;; Also important: text models are fused, while multimodal have embeddings/visual/text separation. Take that in mind and reaname appropriately.
+
+;; TODO deal with reflections

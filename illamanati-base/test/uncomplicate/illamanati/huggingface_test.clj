@@ -8,11 +8,9 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.huggingface-test
-  (:require [uncomplicate.commons
-             [core :refer [with-release]]
-             [utils :refer [path]]]
-            [uncomplicate.illamanati.internal.huggingface :refer [hft]]
-            [uncomplicate.illamanati.tokenizer-test :refer :all])
+  (:require [uncomplicate.commons.core :refer [with-release]]
+            [uncomplicate.illamanati.tokenizer-test :refer :all]
+            [uncomplicate.illamanati.internal.tokenizer.huggingface :refer [hft]])
   (:import ai.djl.huggingface.tokenizers.TokenizerConfig))
 
 (with-release [hf (hft "data/gemma-3-4b-pt/tokenizer.json")]

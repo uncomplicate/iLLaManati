@@ -7,7 +7,7 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns ^{:author "Dragan Djuric"}
-    uncomplicate.illamanati.internal.streaming-decoder
+    uncomplicate.illamanati.internal.tokenizer.streaming-decoder
   (:require [uncomplicate.commons.utils :refer [dragan-says-ex]]
             [charred.api :refer [read-json]])
   (:import java.io.InputStream

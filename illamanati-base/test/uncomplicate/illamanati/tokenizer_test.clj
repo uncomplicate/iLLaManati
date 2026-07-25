@@ -14,9 +14,10 @@
             [clojure.string :refer [join]]
             [uncomplicate.commons.core :refer [with-release info]]
             [uncomplicate.neanderthal
-             [core :refer [vctr ge zero cols rows]]
-             [native :refer [lv iv native-long]]]
-            [uncomplicate.illamanati.tokenizer :refer :all]))
+             [core :refer [cols ge]]
+             [native :refer [iv native-long]]]
+            [uncomplicate.illamanati :refer [encoder decoder async-encoder async-decoder]]
+            [uncomplicate.illamanati.tokenizer :refer [encode ids tokens]]))
 
 (defn test-config [tzr]
   (facts "Tzr config test."

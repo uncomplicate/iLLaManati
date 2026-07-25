@@ -7,29 +7,18 @@
 ;;   You must not remove this notice, or any other, from this software.
 
  (ns ^{:author "Dragan Djuric"}
-    uncomplicate.illamanati.internal.huggingface
+    uncomplicate.illamanati.internal.tokenizer.huggingface
   (:require [clojure.java.io :refer [input-stream copy]]
-            [uncomplicate.commons
-             [core :refer [with-release let-release Releaseable Info]]
-             [utils :refer [path dragan-says-ex]]]
+            [uncomplicate.commons.core :refer [with-release let-release Releaseable Info]]
             [uncomplicate.fluokitten.core :refer [fmap]]
-            [uncomplicate.neanderthal
-             [core :refer [dim transfer! view-vctr]]
-             [block :refer [buffer contiguous?]]]
-            [uncomplicate.neanderthal.internal
-             [api :refer [navigator storage region]]
-             [navigation :refer [full-storage]]]
-            [uncomplicate.illamanati.internal
-             [protocols :as api]
+            [uncomplicate.illamanati.internal.protocols :as api]
+            [uncomplicate.illamanati.internal.tokenizer
              [array-conversion :refer :all]
              [streaming-decoder :refer [streaming-decoder]]])
   (:import [java.io InputStream ByteArrayOutputStream]
-           [java.nio ByteBuffer CharBuffer BufferOverflowException]
-           [java.nio.charset Charset StandardCharsets CodingErrorAction]
            [clojure.lang IFn AFn]
            [ai.djl.huggingface.tokenizers HuggingFaceTokenizer Encoding]
-           [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]
-           [uncomplicate.neanderthal.internal.api IntegerVector IntegerMatrix LayoutNavigator]))
+           [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]))
 
 ;; ================== HUFT Protocols ===========================================
 
@@ -192,77 +181,6 @@
   Decodable
   (decode [src ^HuggingFaceTokenizer hft]
     (.decode hft (long-array src))))
-
-;; ;; ============= Vectors and matrices ==========================================
-
-;; (extend-type IntegerVector
-;;   CoerceLongArray
-;;   (to-longs
-;;     ([this]
-;;      (to-longs this (long-array (dim this))))
-;;     ([this ^longs dst!]
-;;      (if (contiguous? this)
-;;        (to-longs (buffer this) dst!)
-;;        (transfer! this dst!)))
-;;     ([this ^longs dst! ^longs dst-offset]
-;;      (if (contiguous? this)
-;;        (to-longs (buffer this) dst! dst-offset)
-;;        (dragan-says-ex "Only contiguous vectors can be copied to arrays with offset."))))
-;;   (from-longs [this! src]
-;;     (if (contiguous? this!)
-;;       (from-longs (buffer this!) src)
-;;       (transfer! src this!))
-;;     this!)
-;;   Decodable
-;;   (decode [data ^HuggingFaceTokenizer hft]
-;;     (.decode hft (to-longs data))))
-
-;; (extend-type IntegerMatrix
-;;   CoerceLongArray
-;;   (to-longs
-;;     ([data]
-;;      (let [stor (full-storage data)
-;;            batch (.fd stor)
-;;            n (.sd stor)
-;;            res (make-array Long/TYPE batch n)]
-;;        (to-longs data res)))
-;;     ([data ^"[[J" dst!]
-;;      (to-longs data dst! 0))
-;;     ([data ^"[[J" dst! ^long dst-offset]
-;;      (let [nav (navigator data)
-;;            batch (alength dst!)]
-;;        (dotimes [i batch]
-;;          (to-longs (.stripe nav data i) (aget dst! i) dst-offset))
-;;        dst!)))
-;;   (from-longs [this! src]
-;;     (let [stor (full-storage this!)
-;;           nav (navigator this!)
-;;           batch (.fd stor)
-;;           n (.sd stor)]
-;;       (if (contiguous? this!)
-;;         (dotimes [i batch]
-;;           (from-longs (buffer (.stripe nav this! i)) (get (vec src) i)))
-;;         (dotimes [i batch]
-;;           (transfer! (get (vec src) i) (.stripe nav this! i))))
-;;       this!)
-;;     (transfer! (seq src) this!))
-;;   api/EncodingIds
-;;   (ids [this! encodings]
-;;     (let [stor (full-storage this!)
-;;           nav (navigator this!)
-;;           batch (.fd stor)
-;;           n (.sd stor)]
-;;       (if (contiguous? this!)
-;;         (dotimes [i batch]
-;;           (from-longs (buffer (.stripe nav this! i))
-;;                       (.getIds ^Encoding (aget ^"[Lai.djl.huggingface.tokenizers.Encoding;" encodings i))))
-;;         (dotimes [i batch]
-;;           (transfer! (.getIds ^Encoding (aget ^"[Lai.djl.huggingface.tokenizers.Encoding;" encodings i))
-;;                      (.stripe nav this! i))))
-;;       this!))
-;;   Decodable
-;;   (decode [data ^HuggingFaceTokenizer hft]
-;;     (.batchDecode hft (to-longs data) false false)))
 
 ;; ============== HUF extensions ===============================================
 

@@ -8,11 +8,9 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.sentencepiece-test
-  (:require [uncomplicate.commons
-             [core :refer [with-release]]
-             [utils :refer [path]]]
-            [uncomplicate.illamanati.internal.sentencepiece :refer [spp]]
-            [uncomplicate.illamanati.tokenizer-test :refer :all]))
+  (:require [uncomplicate.commons.core :refer [with-release]]
+            [uncomplicate.illamanati.tokenizer-test :refer :all]
+            [uncomplicate.illamanati.internal.tokenizer.sentencepiece :refer [spp]]))
 
 (with-release [sp (spp "../data/gemma-3-tokenizer.model")]
   (test-config sp)

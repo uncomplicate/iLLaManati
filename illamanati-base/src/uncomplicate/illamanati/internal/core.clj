@@ -29,14 +29,12 @@
                                               :default (first (generator! arg))))
               :default (close! tok-chan))))))
 
-(defmulti generator (fn [provider _ _] (device provider)))
-
-(defmethod generator :default [provider in-chan tok-chan]
-  (let-release [generator! (api/generator provider *diamond-factory*)]
+(defmethod api/generator :default [provider in-chan tok-chan]
+  (let-release [step-engine! (api/step-engine provider *diamond-factory*)]
     (thread (generator-loop (info provider :eos)
                             (info provider :bos)
                             (info provider :context-len)
-                            generator!
+                            step-engine!
                             in-chan
                             tok-chan)))
   tok-chan)

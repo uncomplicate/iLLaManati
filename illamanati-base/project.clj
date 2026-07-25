@@ -1,4 +1,4 @@
-(defproject org.uncomplicate/illamanati-tokenizer "0.3.0-SNAPSHOT"
+(defproject org.uncomplicate/illamanati-base "0.4.0-SNAPSHOT"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
@@ -6,16 +6,8 @@
                  [com.cnuernber/charred "1.038"]
                  [org.bytedeco/sentencepiece-platform "0.2.1-1.5.13"]
                  [ai.djl.huggingface/tokenizers "0.36.0"]
-                 ;; The following line includes the Ahead-of-Time (AOT) compiled Deep Diamond, for fast start
-                 ;; In production, you should prefer the specific Deep Diamond parts that you neeed,
-                 ;; and then build them according to your preferences. The functionality is the same,
-                 ;; AOT compilation just loads instantly, but requires exact versions of dependencies,
-                 ;; which then might clash with the versions that you project includes.
-                 ;; If you want to try the Hello World without AOT, just comment out the uncomplicate/deep-diamond
-                 ;; dependency!
-                 ;;[uncomplicate/deep-diamond "0.44.0"]
                  [org.uncomplicate/neanderthal-base "0.64.0"]
-                 [org.uncomplicate/deep-diamond-dnnl "0.46.0"]]
+                 [org.uncomplicate/deep-diamond-base "0.46.0"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.

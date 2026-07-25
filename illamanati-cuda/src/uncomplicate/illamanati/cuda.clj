@@ -17,18 +17,18 @@
              [tensor :refer [*diamond-factory*]]
              [cuda :refer [cuda-factory]]]
             [uncomplicate.snapdragan.cuda :refer []]
-            [uncomplicate.illamanati.internal.core :refer [generator-loop generator]]
-            [uncomplicate.illamanati.internal.protocols :as api]))
+            [uncomplicate.illamanati.internal.protocols :as api]
+            [uncomplicate.illamanati.internal.core :refer [generator-loop]]))
 
 (defn cuda-generator
   ([fact provider in-chan tok-chan]
-   (let-release [generator! (api/generator provider fact)]
+   (let-release [step-engine! (api/step-engine provider fact)]
      (thread (binding [*diamond-factory* fact]
                (in-context (.-ctx fact);;TODO reflection
                  (generator-loop (info provider :eos)
                                  (info provider :bos)
                                  (info provider :context-len)
-                                 generator!
+                                 step-engine!
                                  in-chan
                                  tok-chan))
                fact))))
@@ -41,6 +41,6 @@
            (io-thread (release (<!! release-fact))
                       provider)))))))
 
-(defmethod generator :cuda [provider in-chan tok-chan]
+(defmethod api/generator :cuda [provider in-chan tok-chan]
   (cuda-generator provider in-chan tok-chan)
   tok-chan)

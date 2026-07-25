@@ -8,7 +8,7 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.gemma3
-  (:require [uncomplicate.illamanati.internal.sentencepiece :refer [spp]]))
+  (:require [uncomplicate.illamanati.internal.tokenizer.sentencepiece :refer [spp]]))
 
 (def gemma-3-default {:hidden-size 2560
                       :vocab-size 262208

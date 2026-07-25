@@ -7,7 +7,7 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns ^{:author "Dragan Djuric"}
-    uncomplicate.illamanati.internal.onnxrt.inference
+    uncomplicate.illamanati.internal.onnxrt.optimum
   (:require [uncomplicate.commons
              [core :refer [let-release with-release Releaseable release Info info sizeof view]]
              [utils :refer [dragan-says-ex]]]
@@ -34,7 +34,7 @@
              [impl :refer [*ort-api* *default-allocator*
                            bind-input* bind-output* input-name* output-name*]]
              [model :refer [create-tz tensor-desc]]]
-            [uncomplicate.illamanati.internal.protocols :refer [TokenizerProvider GeneratorProvider]]
+            [uncomplicate.illamanati.internal.protocols :refer [TokenizerProvider StepEngineProvider]]
             [uncomplicate.snapdragan :refer [sampler]])
   (:import [clojure.lang IFn AFn]))
 
@@ -240,8 +240,6 @@
       (synchronize-outputs! prefill-bind);;TODO remove if not needed!
       (copy! last-logits ge-decode-logits)
       decode-logits))
-  (invoke [this embeds attention-mask logits!]
-    (.invoke this embeds attention-mask nil logits!))
   (invoke [_]
     (swap! attention-shape update 1 (fn ^long [^long x]
                                       (min (max-seq-len ((deref kvmans) 0))
@@ -264,7 +262,7 @@
                      [embeds-name attention-mask-name position-ids-name :as input-names]
                      [logits-name :as output-names]
                      decode-embeds
-     max-seq-len]
+                     max-seq-len]
   (with-release [embeds-type-info (input-type-info sess 0)
                  attention-mask-type-info (input-type-info sess 1)
                  position-ids-type-info (when position-ids-name (input-type-info sess 2))
@@ -382,8 +380,6 @@
     (run-session! prefill-bind)
     (synchronize-outputs! prefill-bind);;TODO remove if not needed!
     decode-embeds)
-  (invoke [this input-ids embeds!]
-    (.invoke this input-ids nil embeds!))
   (invoke [_]
     (synchronize-inputs! decode-bind)
     (run-session! decode-bind)
@@ -453,12 +449,12 @@
                          (args ep))))
    opt!))
 
-(deftype TokenGenerator [fact
-                         tensor-desc create-tz
-                         mem-info embedding-model! decoder-model! sample!
-                         ^long batch-size
-                         ^long hidden-size
-                         ^long vocab-size]
+(deftype OptimumStepEngine [fact
+                            tensor-desc create-tz
+                            mem-info embedding-model! decoder-model! sample!
+                            ^long batch-size
+                            ^long hidden-size
+                            ^long vocab-size]
   Releaseable
   (release [_]
     (release decoder-model!)
@@ -529,7 +525,7 @@
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
 
-(defrecord TokenGeneratorProvider [merged-args tok]
+(defrecord OptimumProvider [merged-args tok]
   Releaseable
   (release [_]
     (release tok))
@@ -544,8 +540,8 @@
     (= (device this) (device other)))
   (device [_]
     (:device merged-args))
-  GeneratorProvider
-  (generator [_ fact]
+  StepEngineProvider
+  (step-engine [_ fact]
     (let [vect-fact (neanderthal-factory fact)
           {:keys [batch-size hidden-size vocab-size context-len model-path embedding decoder
                   embedding-inputs embedding-outputs decoder-inputs decoder-outputs]} merged-args]
@@ -571,18 +567,18 @@
                       sample (sampler (view-ge (view-vctr (output decoder))
                                                vocab-size batch-size)
                                       (view-vctr (input embedding)))]
-          (->TokenGenerator fact
-                            (partial tensor-desc fact vect-fact)
-                            (partial create-tz fact vect-fact)
-                            mem-info
-                            embedding decoder sample
-                            batch-size hidden-size vocab-size)))))
+          (->OptimumStepEngine fact
+                               (partial tensor-desc fact vect-fact)
+                               (partial create-tz fact vect-fact)
+                               mem-info
+                               embedding decoder sample
+                               batch-size hidden-size vocab-size)))))
   TokenizerProvider
   (tokenizer [this]
     tok))
 
-(defn token-generator;;TODO move to onnx? and call it TokenGenerator factory?
+(defn optimum-provider
   ([model-path args]
    (let-release [tok (let [[tokenizer model-file] (:tokenizer args)]
                        (tokenizer (format "%s/%s" model-path model-file)))]
-     (->TokenGeneratorProvider (merge *onnx-options* args args {:model-path model-path}) tok))))
+     (->OptimumProvider (merge *onnx-options* args args {:model-path model-path}) tok))))

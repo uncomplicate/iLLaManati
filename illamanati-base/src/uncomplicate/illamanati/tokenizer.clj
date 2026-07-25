@@ -7,13 +7,14 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns ^{:author "Dragan Djuric"}
-    uncomplicate.illamanati
-  (:require [clojure.core.async :refer [chan]]
-            [uncomplicate.illamanati.internal.core :refer [generator]]))
+    uncomplicate.illamanati.tokenizer
+  (:require [uncomplicate.illamanati.internal.protocols :as api]))
 
-(defn async-generator
-  ([provider in-chan tok-chan]
-   (generator provider in-chan tok-chan)
-   tok-chan)
-  ([provider in-chan]
-   (async-generator provider in-chan (chan))))
+(defn encode [tok text]
+  (api/encode tok text))
+
+(defn ids [encoding]
+  (seq (api/ids encoding)))
+
+(defn tokens [encoding]
+  (seq (api/tokens encoding)))
