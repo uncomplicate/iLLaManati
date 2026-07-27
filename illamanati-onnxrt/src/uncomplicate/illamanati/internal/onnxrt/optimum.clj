@@ -208,7 +208,7 @@
 (deftype CoreDecoderModel [fact neand-fact mem-info sess opt run-session! prefill-bind decode-bind
                            input-x-name decode-input-x onnx-decode-input-x
                            attention-mask-name decode-attention-mask onnx-decode-attention-mask
-                           logits-name decode-logits onnx-decode-logits ge-decode-logits
+                           logits-name decode-logits onnx-decode-logits
                            kvmans bind-kv
                            attention-shape]
   Releaseable
@@ -319,7 +319,6 @@
                     decode-logits (create-tz fact neand-fact decode-logits-desc)
                     onnx-decode-logits (onnx-tensor mem-info decode-logits-shape
                                                     (buffer decode-logits) logits-type)
-                    ge-decode-logits (view-ge (view-vctr decode-logits) vocab-size batch-size)
                     base-tz-desc (tensor-desc fact neand-fact kv-5d-shape kv-type kv-5d-strides)
                     base-tz-a (create-tz fact neand-fact base-tz-desc)
                     base-tz-b (create-tz fact neand-fact base-tz-desc)
@@ -337,7 +336,7 @@
         (->CoreDecoderModel fact neand-fact mem-info sess opt run-session! prefill-bind decode-bind
                             input-x-name decode-input-x onnx-decode-input-x
                             attention-mask-name decode-attention-mask onnx-decode-attention-mask
-                            logits-name decode-logits onnx-decode-logits ge-decode-logits
+                            logits-name decode-logits onnx-decode-logits
                             kvmans bind-kv-linear!
                             attention-shape)))))
 
@@ -476,9 +475,10 @@
                      logits (create-tz fact neand-fact logits-desc)
                      onnx-logits (onnx-tensor mem-info logits-shape (buffer logits) logits-dt)
                      last-logits (submatrix (view-ge (view-vctr logits) batch-data-len batch-size)
-                                            (- batch-data-len (long vocab-size)) 0 vocab-size batch-size)]
+                                            (- batch-data-len (long vocab-size)) 0 vocab-size batch-size)
+                     ge-decode-logits (view-ge (view-vctr (output decoder-model!)) vocab-size batch-size)]
         (decoder-model! input-ids onnx-input-ids logits onnx-logits)
-        (copy! last-logits (.ge-decode-logits decoder-model!)))));;TODO reflection
+        (copy! last-logits ge-decode-logits))))
   (invoke [_]
     (decoder-model!))
   (applyTo [this xs]
