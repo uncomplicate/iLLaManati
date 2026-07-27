@@ -67,10 +67,9 @@
                           (override-dimension! "batch_size" batch-size)
                           (cpu-mem-arena! false)
                           (graph-optimization! :all))
-                 sess (session env "../data/Gemma-3-ONNX/gemma-3-4b-it/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/gemma-3-embedding.onnx" opts)
+                 sess (session env "../data/gemma-3-4b-it-ONNX/onnx/embed_tokens_q4f16.onnx" opts)
                  mem-info (memory-info (device (neanderthal-factory fact :float)) :device :default)
-                 gemma3 (embedding-model fact mem-info sess opts
-                                         ["input_ids" "image_features"] ["inputs_embeds"])
+                 gemma3 (embedding-model fact mem-info sess opts ["input_ids"] ["inputs_embeds"])
                  input-ids (tensor vect-fact [batch-size seq-len] :long :nc)
                  onnx-input-ids (onnx-tensor mem-info [batch-size seq-len] (buffer input-ids) :long)
                  prefill-embeds (tensor fact [batch-size seq-len hidden-size] :float :ncw)
@@ -78,10 +77,10 @@
     (facts
       "Super-basic embedding prefill + 1 decode with Gemma 3."
       (transfer! (range 1 (* batch-size seq-len)) input-ids)
-      (time (gemma3 onnx-input-ids nil onnx-prefill-embeds))
-      (seq (transfer! prefill-embeds (double-array 3))) => [-1.3093806505203247 0.15749625861644745 0.29183128476142883]
+      (time (gemma3 onnx-input-ids onnx-prefill-embeds))
+      (seq (transfer! prefill-embeds (double-array 3))) => [-1.3125 0.1572265625 0.291015625]
       (transfer! (range 4) (.decode-input-ids gemma3)) ;;TODO do it in decoder-model initialization
-      (seq (transfer! (time (gemma3)) (double-array 3))) => [0.5435164570808411 0.10422546416521072 -0.116578109562397]
+      (seq (transfer! (time (gemma3)) (double-array 3))) => [0.54296875 0.10400390625 -0.11669921875]
       (time (gemma3)) => (time (gemma3)))))
 
 (let [fact *diamond-factory*
@@ -103,27 +102,67 @@
                           (override-dimension! "batch_size" batch-size)
                           (cpu-mem-arena! false)
                           (graph-optimization! :all))
-                 sess (session env "../data/Gemma-3-ONNX/gemma-3-4b-it/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/gemma-3-text.onnx"
+                 sess (session env "../data/gemma-3-4b-it-ONNX/onnx/decoder_model_merged_q4f16.onnx"
                                opts)
                  mem-info (memory-info (device (neanderthal-factory fact :float)) :device :default)
                  input-embeds (tensor fact [batch-size seq-len hidden-size] :float :ncw)
                  onnx-input-embeds (onnx-tensor mem-info [batch-size seq-len hidden-size] (buffer input-embeds) :float)
                  gemma3 (decoder-model fact mem-info sess opts
-                                       ["inputs_embeds" "attention_mask"] ["logits"]
+                                       ["inputs_embeds" "attention_mask" "num_logits_to_keep"] ["logits"]
                                        input-embeds 6)
                  prefill-mask (tensor vect-fact [batch-size total-seq-len] :long :nc)
-                 onnx-prefill-mask (onnx-tensor mem-info [batch-size total-seq-len] (buffer prefill-mask) :long)
-                 prefill-logits (tensor fact [batch-size seq-len vocab-size] :float :ncw)
-                 onnx-prefill-logits (onnx-tensor mem-info [batch-size seq-len vocab-size] (buffer prefill-logits) :float)]
+                 onnx-prefill-mask (onnx-tensor mem-info [batch-size total-seq-len] (buffer prefill-mask) :long)]
     (facts
       "Super-basic prefill + 1 decode with Gemma 3."
       (transfer! (repeat 0.1) input-embeds)
       (transfer! (repeat 1) prefill-mask)
-      (time (gemma3 input-embeds onnx-input-embeds prefill-mask onnx-prefill-mask nil nil prefill-logits onnx-prefill-logits))
-      (seq (transfer! prefill-logits (double-array 3))) => [-12.705020904541016 12.854991912841797 0.18065690994262695]
+      (time (gemma3 input-embeds onnx-input-embeds prefill-mask onnx-prefill-mask))
+      (seq (transfer! (output gemma3) (double-array 3))) => [-9.3671875 17.421875 9.5390625]
       (transfer! (repeat 0.1) (.decode-embeds gemma3)) ;;TODO do it in text-model initialization
-      (seq (transfer! (time (gemma3)) (double-array 3))) => [-12.020591735839844 13.310209274291992 2.906890869140625]
-      (time (gemma3)) => (time (gemma3)))))
+      (seq (transfer! (time (gemma3)) (double-array 3))) => [-9.3828125 17.421875 9.515625]
+      (gemma3) => (gemma3))))
+
+(let [fact *diamond-factory*
+      vect-fact (neanderthal-factory fact)]
+  (with-release [batch-size 1
+                 seq-len 3
+                 total-seq-len 3
+                 hidden-size 2560
+                 vocab-size 262144
+                 threading-opt (-> (threading-options)
+                                   (denormal-as-zero!)
+                                   (spin-control! true))
+                 env (telemetry! (environment :verbose (name (gensym "illamanati_")) {:inter-op-threads 1
+                                                                                      :intra-op-threads 8
+                                                                                      :denormal-as-zero true
+                                                                                      :spin true}))
+                 opts (-> (options)
+                          (execution-mode! :sequential)
+                          (override-dimension! "batch_size" batch-size)
+                          (cpu-mem-arena! false)
+                          (graph-optimization! :all))
+                 sess (session env "../data/gemma-3-1b-it-ONNX-GQA/onnx/model_q4f16.onnx"
+                               opts)
+                 mem-info (memory-info (device (neanderthal-factory fact :float)) :device :default)
+                 input-ids (tensor vect-fact [batch-size seq-len] :long :nc)
+                 onnx-input-ids (onnx-tensor mem-info [batch-size seq-len] (buffer input-ids) :long)
+                 logits-desc (tensor-desc fact vect-fact [batch-size seq-len vocab-size] :half)
+                 logits (create-tz fact vect-fact logits-desc)
+                 onnx-logits (onnx-tensor mem-info [batch-size seq-len vocab-size] (buffer logits) :half)
+                 gemma3 (core-decoder-model fact mem-info sess opts
+                                            ["input_ids" "attention_mask"] ["logits"] 6)
+                 prefill-mask (tensor vect-fact [batch-size total-seq-len] :long :nc)
+                 onnx-prefill-mask (onnx-tensor mem-info [batch-size total-seq-len] (buffer prefill-mask) :long)]
+    (facts
+      "Super-basic core model prefill + 1 decode with Gemma 3."
+      (transfer! (range 1 (* batch-size seq-len)) input-ids)
+      (transfer! (repeat 1) prefill-mask)
+      (time (gemma3 input-ids onnx-input-ids prefill-mask onnx-prefill-mask logits onnx-logits))
+      (seq (transfer! logits (double-array 3))) => [-17.171875 -0.3603515625 13.234375]
+      ;;(seq (transfer! (output gemma3) (double-array 3))) => [-9.3671875 17.421875 9.5390625]
+      (transfer! (range 4) (.decode-input-x gemma3)) ;;TODO do it in text-model initialization
+      (seq (transfer! (time (gemma3)) (double-array 3))) => [-11.140625 0.34375 -4.9765625]
+      (gemma3) => (gemma3))))
 
 (let [fact *diamond-factory*
       vect-fact (neanderthal-factory fact)]

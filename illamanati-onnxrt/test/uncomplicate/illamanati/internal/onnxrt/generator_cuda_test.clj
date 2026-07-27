@@ -16,9 +16,10 @@
              [cuda :refer [cuda-factory]]]
             [uncomplicate.illamanati.cuda :refer []]
             [uncomplicate.illamanati.internal.protocols :refer [tokenizer]]
-            [uncomplicate.illamanati.internal.onnxrt.gemma3 :refer [gemma-3-gpu-default]]
+            [uncomplicate.illamanati.internal.onnxrt.gemma3
+             :refer [gemma-3-gpu-default gemma-3-gqa-default gemma-3-gqa-gpu-default]]
             [uncomplicate.illamanati.internal.onnxrt.generator-test
-             :refer [test-generator test-async-generator]]))
+             :refer [test-generator test-async-generator test-gqa-generator]]))
 
 (with-default
   (reset-context! (device))
@@ -28,3 +29,9 @@
 
 (with-default
   (test-async-generator gemma-3-gpu-default))
+
+(with-default
+  (reset-context! (device))
+  (binding [*headers* {"cuda_fp16.h" nil}]
+    (with-diamond cuda-factory []
+      (test-gqa-generator gemma-3-gqa-gpu-default))))

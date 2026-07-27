@@ -19,12 +19,12 @@
             [uncomplicate.illamanati.internal.protocols :as api]
             [uncomplicate.illamanati.internal.onnxrt
              [optimum :refer [optimum-provider]]
-             [gemma3 :refer [gemma-3-cpu-default]]]))
+             [gemma3 :refer [gemma-3-cpu-default gemma-3-gqa-default]]]))
 
 (defn test-generator [config]
-  (with-release [model-path "../data/Gemma-3-ONNX/gemma-3-4b-it"
+  (with-release [model-path "../data/gemma-3-4b-it-ONNX"
                  text-input "Belgrade is the capital"
-                 provider (optimum-provider model-path (into config {:context-len 12}))
+                 provider (optimum-provider model-path (into config {:context-len 4096}))
                  gen (api/step-engine provider *diamond-factory*)
                  tok (api/tokenizer provider)
                  ids (cons (info tok :bos) (tok text-input))
@@ -46,14 +46,13 @@
 (test-generator gemma-3-cpu-default)
 
 (defn test-async-generator [config]
-  (with-release [model-path "../data/Gemma-3-ONNX/gemma-3-4b-it"
+  (with-release [model-path "../data/gemma-3-4b-it-ONNX"
                  prompt "Belgrade is the capital"
                  provider (optimum-provider model-path (into config {:context-len 12}))]
     (let [prompt-chan (chan)
           ids-chan (async-encoder provider prompt-chan)
           id-chan (async-generator provider ids-chan)
           text-chan (async-decoder provider id-chan)]
-
       (facts
         "ONNX Gemma3 async generator test."
         (>!! prompt-chan prompt)
@@ -63,3 +62,27 @@
         (<!! text-chan) => nil))))
 
 (test-async-generator gemma-3-cpu-default)
+
+(defn test-gqa-generator [config]
+  (with-release [model-path "../data/gemma-3-1b-it-ONNX-GQA"
+                 text-input "Belgrade is the capital"
+                 provider (optimum-provider model-path (into config {:context-len 4096}))
+                 gen (api/step-engine provider *diamond-factory*)
+                 tok (api/tokenizer provider)
+                 ids (cons (info tok :bos) (tok text-input))
+                 st (tok)]
+    (facts
+      "ONNX Gemma3 GQA inference test."
+      (println "----------------- prefill starts ------------------")
+      (count ids) => 6
+      (st (first (time (gen ids 1.0)))) => " of"
+      (println "----------------- prefill ends ------------------")
+      (println "----------------- decode starts ------------------")
+      (st (first (time (gen 1.0)))) => " Serbia"
+      (st (first (time (gen 1.0)))) => ","
+      (st (first (time (gen 1.0)))) => " a"
+      (st (first (time (gen 1.0)))) => " vibrant"
+      (st (first (time (gen 1.0)))) => " and"
+      (println "----------------- decode ends ------------------"))))
+
+(test-gqa-generator gemma-3-gqa-default)
