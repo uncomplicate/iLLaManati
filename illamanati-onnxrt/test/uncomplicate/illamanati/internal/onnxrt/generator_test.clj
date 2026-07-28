@@ -21,9 +21,8 @@
              [optimum :refer [optimum-provider]]
              [gemma3 :refer [gemma-3-cpu-default gemma-3-gqa-default]]]))
 
-(defn test-generator [config]
-  (with-release [model-path "../data/gemma-3-4b-it-ONNX"
-                 text-input "Belgrade is the capital"
+(defn test-generator [config model-path answer]
+  (with-release [text-input "Belgrade is the capital"
                  provider (optimum-provider model-path (into config {:context-len 4096}))
                  gen (api/step-engine provider *diamond-factory*)
                  tok (api/tokenizer provider)
@@ -33,21 +32,21 @@
       "ONNX Gemma3 inference test."
       (println "----------------- prefill starts ------------------")
       (count ids) => 6
-      (st (first (time (gen ids 1.0)))) => " and"
+      (st (first (time (gen ids 1.0)))) => (answer 0)
       (println "----------------- prefill ends ------------------")
       (println "----------------- decode starts ------------------")
-      (st (first (time (gen 1.0)))) => " largest"
-      (st (first (time (gen 1.0)))) => " city"
-      (st (first (time (gen 1.0)))) => " of"
-      (st (first (time (gen 1.0)))) => " Serbia"
-      (st (first (time (gen 1.0)))) => "."
+      (st (first (time (gen 1.0)))) => (answer 1)
+      (st (first (time (gen 1.0)))) => (answer 2)
+      (st (first (time (gen 1.0)))) => (answer 3)
+      (st (first (time (gen 1.0)))) => (answer 4)
+      (st (first (time (gen 1.0)))) => (answer 5)
       (println "----------------- decode ends ------------------"))))
 
-(test-generator gemma-3-cpu-default)
+(test-generator gemma-3-cpu-default "../data/gemma-3-4b-it-ONNX" [" and" " largest" " city" " of" " Serbia" "."])
+(test-generator gemma-3-gqa-default "../data/gemma-3-1b-it-ONNX-GQA" [" of" " Serbia" "," " a" " vibrant" " and"])
 
-(defn test-async-generator [config]
-  (with-release [model-path "../data/gemma-3-4b-it-ONNX"
-                 prompt "Belgrade is the capital"
+(defn test-async-generator [config model-path answer]
+  (with-release [prompt "Belgrade is the capital"
                  provider (optimum-provider model-path (into config {:context-len 12}))]
     (let [prompt-chan (chan)
           ids-chan (async-encoder provider prompt-chan)
@@ -56,33 +55,9 @@
       (facts
         "ONNX Gemma3 async generator test."
         (>!! prompt-chan prompt)
-        (<!! text-chan) => " and"
-        (time (join (repeatedly 5 #(<!! text-chan)))) => " largest city of Serbia."
+        (time (join (repeatedly 6 #(<!! text-chan)))) => answer
         (close! prompt-chan)
         (<!! text-chan) => nil))))
 
-(test-async-generator gemma-3-cpu-default)
-
-(defn test-gqa-generator [config]
-  (with-release [model-path "../data/gemma-3-1b-it-ONNX-GQA"
-                 text-input "Belgrade is the capital"
-                 provider (optimum-provider model-path (into config {:context-len 4096}))
-                 gen (api/step-engine provider *diamond-factory*)
-                 tok (api/tokenizer provider)
-                 ids (cons (info tok :bos) (tok text-input))
-                 st (tok)]
-    (facts
-      "ONNX Gemma3 GQA inference test."
-      (println "----------------- prefill starts ------------------")
-      (count ids) => 6
-      (st (first (time (gen ids 1.0)))) => " of"
-      (println "----------------- prefill ends ------------------")
-      (println "----------------- decode starts ------------------")
-      (st (first (time (gen 1.0)))) => " Serbia"
-      (st (first (time (gen 1.0)))) => ","
-      (st (first (time (gen 1.0)))) => " a"
-      (st (first (time (gen 1.0)))) => " vibrant"
-      (st (first (time (gen 1.0)))) => " and"
-      (println "----------------- decode ends ------------------"))))
-
-(test-gqa-generator gemma-3-gqa-default)
+(test-async-generator gemma-3-cpu-default "../data/gemma-3-4b-it-ONNX" " and largest city of Serbia.")
+(test-async-generator gemma-3-gqa-default "../data/gemma-3-1b-it-ONNX-GQA" " of Serbia, a vibrant and")
