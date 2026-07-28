@@ -424,7 +424,7 @@
           embeds-dt (data-type (output embedding-model!))]
       (with-release [embeds-desc (tensor-desc fact neand-fact embeds-shape embeds-dt)
                      embeds (create-tz fact neand-fact embeds-desc)
-                     onnx-embeds (onnx-tensor mem-info embeds-shape (buffer embeds) embeds-dt)]
+                     onnx-embeds (onnx-tensor mem-info (take 3 embeds-shape) (buffer embeds) embeds-dt)]
         (embedding-model! onnx-input-ids onnx-embeds)
         (decoder-model! embeds onnx-embeds))))
   (invoke [_]
@@ -473,7 +473,7 @@
           logits-dt (data-type (output decoder-model!))]
       (with-release [logits-desc (tensor-desc fact neand-fact logits-shape logits-dt)
                      logits (create-tz fact neand-fact logits-desc)
-                     onnx-logits (onnx-tensor mem-info logits-shape (buffer logits) logits-dt)
+                     onnx-logits (onnx-tensor mem-info (take 3 logits-shape) (buffer logits) logits-dt)
                      last-logits (submatrix (view-ge (view-vctr logits) batch-data-len batch-size)
                                             (- batch-data-len (long vocab-size)) 0 vocab-size batch-size)
                      ge-decode-logits (view-ge (view-vctr (output decoder-model!)) vocab-size batch-size)]
