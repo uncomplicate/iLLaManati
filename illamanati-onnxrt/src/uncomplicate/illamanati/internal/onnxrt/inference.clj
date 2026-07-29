@@ -91,7 +91,7 @@
       (dragan-says-ex "please don't try to process prompts leading to negative kv-cache size."
                       {:total-seq-len total-seq-len}))))
 
-(defn element-alignment ^long [data-type]
+(defn element-alignment ^long [^long data-type]
   (case data-type
     0 64
     1 128
