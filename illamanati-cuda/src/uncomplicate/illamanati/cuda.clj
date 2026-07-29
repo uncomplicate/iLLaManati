@@ -16,6 +16,7 @@
             [uncomplicate.diamond
              [tensor :refer [*diamond-factory*]]
              [cuda :refer [cuda-factory]]]
+            [uncomplicate.snapdragan.cuda :refer []]
             [uncomplicate.illamanati.internal.protocols :as api]
             [uncomplicate.illamanati.internal.core :refer [generator-loop]]))
 

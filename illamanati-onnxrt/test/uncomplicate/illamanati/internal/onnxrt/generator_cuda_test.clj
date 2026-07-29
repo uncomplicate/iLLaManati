@@ -15,7 +15,6 @@
              [tensor :refer [with-diamond]]
              [cuda :refer [cuda-factory]]]
             [uncomplicate.illamanati.cuda :refer []]
-            [uncomplicate.illamanati.internal.protocols :refer [tokenizer]]
             [uncomplicate.illamanati.internal.onnxrt.gemma3
              :refer [gemma-3-gpu-default gemma-3-gqa-default gemma-3-gqa-gpu-default]]
             [uncomplicate.illamanati.internal.onnxrt.generator-test

@@ -299,7 +299,8 @@
                                                  input-offset output-offset
                                                  batch-size num-heads max-seq-len head-dim)
                     kvmans (atom [kvm-a kvm-b 0])]
-        (entry! (view-vctr decode-attention-mask) 1)
+        (entry! (view-vctr decode-attention-mask) 1);;TODO do in the initialize method
+        (entry! (view-vctr decode-input-x) 1);;TODO do in the initialize method
         (bind-input! decode-bind input-x-name onnx-decode-input-x)
         (bind-output! decode-bind logits-name onnx-decode-logits)
         (bind-output! prefill-bind logits-name onnx-decode-logits)
@@ -366,6 +367,7 @@
                     decode-embeds (create-tz fact neand-fact decode-embeds-desc)
                     onnx-decode-embeds (onnx-tensor mem-info [batch-size 1 hidden-size]
                                                     (buffer decode-embeds) embeds-type)]
+        (entry! (view-vctr decode-input-ids) 1);;TODO do in the initialize method
         (bind-input! decode-bind input-ids-name onnx-decode-input-ids)
         (bind-output! decode-bind embeds-name onnx-decode-embeds)
         (->EmbeddingModel fact mem-info sess opt run-session! prefill-bind decode-bind

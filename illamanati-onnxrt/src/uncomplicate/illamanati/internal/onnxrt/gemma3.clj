@@ -15,7 +15,8 @@
                       :context-len 128000
                       :batch-size 1
                       :tokenizer [spp "gemma-3-tokenizer.model"]
-                      :embedding-inputs ["input_ids" "image_features"]
+                      ;;:embedding-inputs ["input_ids" "image_features"]
+                      :embedding-inputs ["input_ids"]
                       :embedding-outputs ["inputs_embeds"]})
 
 (def gemma-3-gqa-default {:hidden-size 2560
