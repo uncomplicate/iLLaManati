@@ -104,6 +104,6 @@
              (.clear in)))))))
   ([^InputStream vocabulary-stream ^long capacity]
    (let [[bpe-lookup vocabulary-lookup] (huf-vocabulary-array vocabulary-stream)]
-     (streaming-decoder bpe-lookup vocabulary-lookup capacity)))
+     (partial streaming-decoder bpe-lookup vocabulary-lookup capacity)))
   ([vocabulary-source]
    (streaming-decoder vocabulary-source 1024)))

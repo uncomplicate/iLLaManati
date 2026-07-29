@@ -14,19 +14,19 @@
             [uncomplicate.diamond.tensor :refer [*diamond-factory*]]
             [uncomplicate.illamanati.internal.protocols :as api]))
 
-(defn generator-loop [eos bos context-len generator! in-chan tok-chan]
-  (with-release [generator! generator!]
+(defn generator-loop [eos bos context-len step-engine! in-chan tok-chan]
+  (with-release [step-engine! step-engine!]
     (let [prompt (cons bos (<!! in-chan))
           arg 1.0]
       (loop [n (count prompt)
-             token (first (generator! prompt arg))]
+             token (first (step-engine! prompt arg))]
         (when (number? token) (>!! tok-chan token))
         (cond (or (not token) (= :stop token)) (close! tok-chan)
               (= :pause token) (recur n (<!! in-chan));;TODO cover a continuation prompt here when that becomes available.
               (= eos token) (recur (inc n) (<!! in-chan));;TODO cover a continuation prompt here when that becomes available.
-              (< n context-len) (recur (inc n)
+              (< n context-len) (recur (inc n);;TODO if I receive a signal I should not increase n
                                        (alt!! in-chan ([signal] signal)
-                                              :default (first (generator! arg))))
+                                              :default (first (step-engine! arg))))
               :default (close! tok-chan))))))
 
 (defmethod api/generator :default [provider in-chan tok-chan]

@@ -11,11 +11,13 @@
   (:require [midje.sweet :refer [facts =>]]
             [clojure.string :refer [join]]
             [clojure.core.async :refer [chan >!! <!! close! thread]]
+            [clojure.core.async.flow :as flow :refer [create-flow start resume stop inject process]]
             [uncomplicate.commons [core :refer [with-release info]]]
             [uncomplicate.diamond
              [tensor :refer [*diamond-factory*]]
              [native :refer []]]
-            [uncomplicate.illamanati :refer [async-generator async-encoder async-decoder]]
+            [uncomplicate.illamanati
+             :refer [async-generator async-encoder async-decoder encoder decoder generator]]
             [uncomplicate.illamanati.internal.protocols :as api]
             [uncomplicate.illamanati.internal.onnxrt
              [optimum :refer [optimum-provider]]
@@ -46,9 +48,9 @@
 (test-generator gemma-3-gqa-default "../data/gemma-3-1b-it-ONNX-GQA" [" of" " Serbia" "," " a" " vibrant" " and"])
 
 (defn test-async-generator [config model-path answer]
-  (with-release [prompt "Belgrade is the capital"
-                 provider (optimum-provider model-path (into config {:context-len 12}))]
-    (let [prompt-chan (chan)
+  (with-release [provider (optimum-provider model-path (into config {:context-len 12}))]
+    (let [prompt "Belgrade is the capital"
+          prompt-chan (chan)
           ids-chan (async-encoder provider prompt-chan)
           id-chan (async-generator provider ids-chan)
           text-chan (async-decoder provider id-chan)]
@@ -61,3 +63,35 @@
 
 (test-async-generator gemma-3-cpu-default "../data/gemma-3-4b-it-ONNX" " and largest city of Serbia.")
 (test-async-generator gemma-3-gqa-default "../data/gemma-3-1b-it-ONNX-GQA" " of Serbia, a vibrant and")
+
+(defn test-flow-generator [config model-path answer]
+  (let [fact *diamond-factory*]
+    (with-release [provider (optimum-provider model-path (into config {:context-len 12}))]
+      (facts "Test token generator flow."
+             (let [input "Belgrade is the capital"
+                   topology {:procs {:enc {:proc (process #'encoder)
+                                           :args {:tokenizer provider}}
+                                     :dec {:proc (process #'decoder)
+                                           :args {:tokenizer provider}}
+                                     :gen {:proc (process #'generator)
+                                           :executor :thread
+                                           :args {:provider provider
+                                                  :diamond-factory fact}}
+                                     :monitor {:proc (process (fn
+                                                                ([] {:ins {:in :data}})
+                                                                ([s] s)
+                                                                ([s _] s)
+                                                                ([s _ m] [s {::flow/report [m]}])))}}
+                             :conns [[[:enc :out] [:gen :prompt]]
+                                     [[:gen :token] [:dec :in]]
+                                     [[:gen :next] [:gen :step]]
+                                     [[:dec :out] [:monitor :in]]]}
+                   f (create-flow topology)
+                   running-flow (start f)]
+               (resume f)
+               (inject f [:enc :in] [input])
+               (time (join (repeatedly 6 #(<!! (:report-chan running-flow))))) => answer
+               (stop f))))))
+
+(test-flow-generator gemma-3-cpu-default "../data/gemma-3-4b-it-ONNX" " and largest city of Serbia.")
+(test-flow-generator gemma-3-gqa-default "../data/gemma-3-1b-it-ONNX-GQA" " of Serbia, a vibrant and")

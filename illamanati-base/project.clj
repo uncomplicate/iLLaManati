@@ -1,4 +1,4 @@
-(defproject org.uncomplicate/illamanati-base "0.4.0-SNAPSHOT"
+(defproject org.uncomplicate/illamanati-base "0.5.0-SNAPSHOT"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
@@ -6,7 +6,7 @@
                  [com.cnuernber/charred "1.038"]
                  [org.bytedeco/sentencepiece-platform "0.2.1-1.5.13"]
                  [ai.djl.huggingface/tokenizers "0.36.0"]
-                 [org.uncomplicate/neanderthal-base "0.64.0"]
+                 [org.uncomplicate/neanderthal-base "0.65.0-SNAPSHOT"]
                  [org.uncomplicate/deep-diamond-base "0.46.0"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
@@ -21,11 +21,11 @@
                                      *print-length* 128}
                        :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=true"
                                             "--enable-native-access=ALL-UNNAMED"]}
-             :linux {:dependencies [[org.uncomplicate/neanderthal-mkl "0.64.0"]
+             :linux {:dependencies [[org.uncomplicate/neanderthal-mkl "0.65.0-SNAPSHOT"]
                                     [org.bytedeco/mkl "2025.3-1.5.13" :classifier "linux-x86_64-redist"]]}
-             :windows {:dependencies [[org.uncomplicate/neanderthal-mkl "0.64.0"]
+             :windows {:dependencies [[org.uncomplicate/neanderthal-mkl "0.65.0-SNAPSHOT"]
                                       [org.bytedeco/mkl "2025.3-1.5.13" :classifier "windows-x86_64-redist"]]}
-             :macosx {:dependencies [[org.uncomplicate/neanderthal-accelerate "0.64.0"]
+             :macosx {:dependencies [[org.uncomplicate/neanderthal-accelerate "0.65.0-SNAPSHOT"]
                                      [org.bytedeco/openblas "0.3.31-1.5.13" :classifier "macosx-arm64"]]}}
 
   :resource-paths ["data"]

@@ -185,7 +185,7 @@
 (defn sp-streaming-decoder
   ([^SentencePieceProcessor processor ^long capacity]
    (let [[bpe-lookup vocabulary-lookup] (sp-vocabulary-array processor)]
-     (streaming-decoder bpe-lookup vocabulary-lookup capacity)))
+     (partial streaming-decoder bpe-lookup vocabulary-lookup capacity)))
   ([processor]
    (sp-streaming-decoder processor 1024)))
 
@@ -234,7 +234,7 @@
         (api/ids enc))
       (decode text-or-token-ids processor)))
   (invoke [_]
-    decoder-fn)
+    (decoder-fn))
   (applyTo [this xs]
     (AFn/applyToHelper this xs))
   api/Encoder

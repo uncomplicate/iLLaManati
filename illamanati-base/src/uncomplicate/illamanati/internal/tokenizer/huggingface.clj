@@ -207,7 +207,7 @@
             (api/ids enc))
           (decode text-or-token-ids hft)))
   (invoke [_]
-    decoder-fn)
+    (decoder-fn))
   (applyTo [this xs]
     (AFn/applyToHelper this xs))
   api/Encoder

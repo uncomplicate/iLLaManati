@@ -217,7 +217,6 @@
                                                         (options opt)
                                                         (options))
                                                       merged-args)
-
                       decoder-sess (session env (format "%s/%s" model-path decoder) decoder-opt)
                       decoder (if embedding
                                 (let-release [embedding-opt (options decoder-opt)

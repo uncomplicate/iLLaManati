@@ -82,12 +82,19 @@
                                        :args {:tokenizer tok}}
                                  :dec {:proc (process #'decoder)
                                        :args {:tokenizer tok}}
+                                 :sequencer {:proc (process (fn
+                                                              ([] {:ins {:in :data}
+                                                                   :outs {:out :data}})
+                                                              ([_] nil)
+                                                              ([_ _] nil)
+                                                              ([_ _ s] [nil {:out s}])))}
                                  :monitor {:proc (process (fn
                                                             ([] {:ins {:in :data}})
-                                                            ([s] s)
-                                                            ([s _] s)
-                                                            ([s _ m] [s {::flow/report [m]}])))}}
-                         :conns [[[:enc :out] [:dec :in]]
+                                                            ([_] _)
+                                                            ([_ _] _)
+                                                            ([_ _ m] [_ {::flow/report [m]}])))}}
+                         :conns [[[:enc :out] [:sequencer :in]]
+                                 [[:sequencer :out] [:dec :in]]
                                  [[:dec :out] [:monitor :in]]]}
                f (create-flow topology)
                running-flow (start f)]

@@ -9,7 +9,8 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati
   (:require [clojure.core.async :refer [<!! >!! io-thread chan close!]]
-            [uncomplicate.commons.core :refer [with-release]]
+            [clojure.core.async.flow :as flow]
+            [uncomplicate.commons.core :refer [with-release release info]]
             [uncomplicate.illamanati.internal
              [protocols :as api]
              [core :refer []]]))
@@ -54,14 +55,14 @@
   ([]
    {:params {:tokenizer "Tokenizer"}
     :ins {:in "Text"}
-    :outs {:out "Token ids"}})
+    :outs {:out "A sequence of token ids"}})
   ([args]
    (api/tokenizer (:tokenizer args)))
   ([tokenizer _]
    tokenizer)
   ([tokenizer _ text]
    (with-release [encoding (api/encode tokenizer text)]
-     [tokenizer {:out (api/ids encoding)}])))
+     [tokenizer {:out [(api/ids encoding)]}])))
 
 (defn decoder
   ([]
@@ -77,13 +78,29 @@
               (when-not (= "" decoded-part)
                 {:out [decoded-part]}))]))
 
-
-;; TODO once the move to onnx-community has been done,  move all code that is optimum-specific from inference to optimum.clj!
-
-;; Another good thing: onnx-community-GQA is the same for GPU and CPU, so this should solve this problem anyway...
-
-;; So, to onnx-community. The good thing is
-;; that their optimum export should produce consistent structure for most models, so I can reuse most of the code.
-;; Also important: text models are fused, while multimodal have embeddings/visual/text separation. Take that in mind and reaname appropriately.
-
-;; TODO deal with reflections
+(defn generator
+  ([]
+   {:params {:provider "Step engine provider"
+             :diamond-factory "Deep Diamond tensor factory"}
+    :ins {:prompt "Initial prompt token ids"
+          :step "Self-trigger loop counter"}
+    :outs {:token "Generated token id"
+           :next "Self-trigger loop counter"}})
+  ([args]
+   (let [provider (:provider args)
+         fact (:diamond-factory args)]
+     (into (select-keys (info provider) [:eos :bos :context-len])
+           {:step-engine (api/step-engine provider fact)
+            :fact fact})))
+  ([state transition]
+   (case transition
+     ::flow/stop (update state (:step-engine state) release)
+     state))
+  ([{:keys [step-engine bos eos context-len] :as state} port data]
+   (let [[n [token :as msg]] (case port
+                               :prompt [(inc (count data)) (step-engine (cons bos data) 1.0)]
+                               :step [(inc data) (step-engine 1.0)]
+                               [context-len nil])]
+     [state (if (and token (not= eos token) (< n context-len))
+              {:token msg :next [n]}
+              {:token msg})])))

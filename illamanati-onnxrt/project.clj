@@ -6,7 +6,7 @@
                  [org.uncomplicate/deep-diamond-base "0.46.0"]
                  [org.uncomplicate/deep-diamond-dnnl "0.46.0"]
                  [org.uncomplicate/diamond-onnxrt "0.29.0-SNAPSHOT"]
-                 [org.uncomplicate/illamanati-base "0.4.0-SNAPSHOT"]]
+                 [org.uncomplicate/illamanati-base "0.5.0-SNAPSHOT"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
@@ -20,7 +20,7 @@
                                      *print-length* 128}
                        :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=tru"
                                             "--enable-native-access=ALL-UNNAMED"]}
-             :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.4.0-SNAPSHOT"]
+             :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.5.0-SNAPSHOT"]
                                     [org.uncomplicate/snapdragan-cuda "0.7.0-SNAPSHOT"]
                                     [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-SNAPSHOT"]
                                     [org.uncomplicate/neanderthal-mkl "0.65.0-SNAPSHOT"]
@@ -29,7 +29,7 @@
                                     [org.bytedeco/cuda-redist-cublas "13.3-9.24-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-cudnn "13.3-9.24-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-nccl "13.3-9.24-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]]}
-             :windows {:dependencies [[org.uncomplicate/illamanati-cuda "0.4.0-SNAPSHOT"]
+             :windows {:dependencies [[org.uncomplicate/illamanati-cuda "0.5.0-SNAPSHOT"]
                                       [org.uncomplicate/snapdragan-cuda "0.7.0-SNAPSHOT"]
                                       [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-SNAPSHOT"]
                                       [org.uncomplicate/neanderthal-mkl "0.65.0-SNAPSHOT"]
