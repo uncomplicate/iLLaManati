@@ -15,18 +15,22 @@
              [tensor :refer [with-diamond]]
              [cuda :refer [cuda-factory]]]
             [uncomplicate.illamanati.cuda :refer []]
+            [uncomplicate.snapdragan.cuda :refer []]
             [uncomplicate.illamanati.internal.onnxrt.gemma3
              :refer [gemma-3-gpu-default gemma-3-gqa-default gemma-3-gqa-gpu-default]]
             [uncomplicate.illamanati.internal.onnxrt.generator-test
-             :refer [test-generator test-async-generator]]))
+             :refer [test-generator test-async-generator test-flow-generator]]))
 
 (with-default
-  (reset-context! (device))
-  (binding [*headers* {"cuda_fp16.h" nil}]
-    (with-diamond cuda-factory []
-      (test-generator gemma-3-gpu-default "../data/gemma-3-4b-it-ONNX" [" and" " largest" " city" " of" " Serbia" "."])
-      (test-generator gemma-3-gqa-gpu-default "../data/gemma-3-1b-it-ONNX-GQA" [" of" " Serbia" "," " a" " vibrant" " and"]))))
+  ;;(binding [*headers* {"cuda_fp16.h" nil}])
+  (with-diamond cuda-factory []
+    (test-generator gemma-3-gpu-default "../data/gemma-3-4b-it-ONNX" [" and" " largest" " city" " of" " Serbia" "."])
+    (test-generator gemma-3-gqa-gpu-default "../data/gemma-3-1b-it-ONNX-GQA" [" of" " Serbia" "," " a" " vibrant" " and"])))
 
 (with-default
   (test-async-generator gemma-3-gpu-default "../data/gemma-3-4b-it-ONNX" " and largest city of Serbia.")
   (test-async-generator gemma-3-gqa-gpu-default "../data/gemma-3-1b-it-ONNX-GQA" " of Serbia, a vibrant and"))
+
+(with-default
+  (test-flow-generator gemma-3-gpu-default "../data/gemma-3-4b-it-ONNX" " and largest city of Serbia.")
+  (test-flow-generator gemma-3-gqa-gpu-default "../data/gemma-3-1b-it-ONNX-GQA" " of Serbia, a vibrant and"))

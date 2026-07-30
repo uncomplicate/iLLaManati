@@ -9,7 +9,7 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati
   (:require [clojure.core.async :refer [<!! >!! io-thread chan close!]]
-            [clojure.core.async.flow :as flow]
+            [clojure.core.async.flow :refer [process]]
             [uncomplicate.commons.core :refer [with-release release info]]
             [uncomplicate.illamanati.internal
              [protocols :as api]
@@ -78,29 +78,5 @@
               (when-not (= "" decoded-part)
                 {:out [decoded-part]}))]))
 
-(defn generator
-  ([]
-   {:params {:provider "Step engine provider"
-             :diamond-factory "Deep Diamond tensor factory"}
-    :ins {:prompt "Initial prompt token ids"
-          :step "Self-trigger loop counter"}
-    :outs {:token "Generated token id"
-           :next "Self-trigger loop counter"}})
-  ([args]
-   (let [provider (:provider args)
-         fact (:diamond-factory args)]
-     (into (select-keys (info provider) [:eos :bos :context-len])
-           {:step-engine (api/step-engine provider fact)
-            :fact fact})))
-  ([state transition]
-   (case transition
-     ::flow/stop (update state (:step-engine state) release)
-     state))
-  ([{:keys [step-engine bos eos context-len] :as state} port data]
-   (let [[n [token :as msg]] (case port
-                               :prompt [(inc (count data)) (step-engine (cons bos data) 1.0)]
-                               :step [(inc data) (step-engine 1.0)]
-                               [context-len nil])]
-     [state (if (and token (not= eos token) (< n context-len))
-              {:token msg :next [n]}
-              {:token msg})])))
+(defn generator-process [provider]
+  (process (api/generator provider)))

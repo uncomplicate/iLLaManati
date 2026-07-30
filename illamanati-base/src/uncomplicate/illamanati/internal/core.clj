@@ -9,10 +9,13 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.core
   (:require [clojure.core.async :refer [<!! >!! alt!! close! chan thread]]
-            [uncomplicate.commons.core :refer [with-release let-release info]]
+            [clojure.core.async.flow :as flow]
+            [uncomplicate.commons.core :refer [with-release let-release release info]]
             [uncomplicate.neanderthal.internal.api :refer [device]]
             [uncomplicate.diamond.tensor :refer [*diamond-factory*]]
             [uncomplicate.illamanati.internal.protocols :as api]))
+
+;; ======= core.async generator loop ============================================================
 
 (defn generator-loop [eos bos context-len step-engine! in-chan tok-chan]
   (with-release [step-engine! step-engine!]
@@ -29,12 +32,51 @@
                                               :default (first (step-engine! arg))))
               :default (close! tok-chan))))))
 
-(defmethod api/generator :default [provider in-chan tok-chan]
-  (let-release [step-engine! (api/step-engine provider *diamond-factory*)]
-    (thread (generator-loop (info provider :eos)
-                            (info provider :bos)
-                            (info provider :context-len)
-                            step-engine!
-                            in-chan
-                            tok-chan)))
-  tok-chan)
+;; ======= core.async Flow step functions ==========================================================
+
+(defn generator-describe []
+  {:ins {:prompt "Initial prompt token ids"
+         :step "Self-trigger loop counter"}
+   :outs {:token "Generated token id"
+          :next "Self-trigger loop counter"}})
+
+(defn generator-init [fact provider]
+  (into (select-keys (info provider) [:eos :bos :context-len])
+        {:step-engine (api/step-engine provider fact)}))
+
+(defn generator-transition [state transition]
+  (case transition
+    ::flow/stop (update state :step-engine release)
+    state))
+
+(defn generator-transform [{:keys [step-engine bos eos context-len] :as state} port data]
+  (let [[n [token :as msg]] (case port
+                              :prompt [(inc (count data)) (step-engine (cons bos data) 1.0)]
+                              :step [(inc data) (step-engine 1.0)]
+                              [context-len nil])]
+    [state (if (and token (not= eos token) (< n context-len))
+             {:token msg :next [n]}
+             {:token msg})]))
+
+;; ======= Polymorphic generator dispatch =============================================================
+
+(defmethod api/generator :default
+  ([provider in-chan tok-chan]
+   (let-release [step-engine! (api/step-engine provider *diamond-factory*)]
+     (thread (generator-loop (info provider :eos)
+                             (info provider :bos)
+                             (info provider :context-len)
+                             step-engine!
+                             in-chan
+                             tok-chan)))
+   tok-chan)
+  ([provider]
+   (fn
+     ([]
+      (generator-describe))
+     ([arg-map]
+      (generator-init *diamond-factory* provider))
+     ([state trans]
+      (generator-transition state trans))
+     ([state input msg]
+      (generator-transform state input msg)))))

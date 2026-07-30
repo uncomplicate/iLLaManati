@@ -25,4 +25,4 @@
 (defprotocol EncodingTokens
   (tokens [this]))
 
-(defmulti generator (fn [provider _ _] (device provider)))
+(defmulti generator (fn [provider & _] (device provider)))
