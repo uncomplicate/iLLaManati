@@ -6,6 +6,7 @@
                  [org.uncomplicate/deep-diamond-base "0.46.0"]
                  [org.uncomplicate/deep-diamond-dnnl "0.46.0"]
                  [org.uncomplicate/diamond-onnxrt "0.29.0-SNAPSHOT"]
+                 [org.uncomplicate/snapdragan-base "0.8.0-SNAPSHOT"]
                  [org.uncomplicate/illamanati-base "0.5.0-SNAPSHOT"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
@@ -21,7 +22,7 @@
                        :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=tru"
                                             "--enable-native-access=ALL-UNNAMED"]}
              :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.5.0-SNAPSHOT"]
-                                    [org.uncomplicate/snapdragan-cuda "0.7.0-SNAPSHOT"]
+                                    [org.uncomplicate/snapdragan-cuda "0.8.0-SNAPSHOT"]
                                     [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-SNAPSHOT"]
                                     [org.uncomplicate/neanderthal-mkl "0.65.0-SNAPSHOT"]
                                     [org.bytedeco/mkl "2025.3-1.5.13" :classifier "linux-x86_64-redist"]
@@ -30,7 +31,7 @@
                                     [org.bytedeco/cuda-redist-cudnn "13.3-9.24-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-nccl "13.3-9.24-1.5.14-SNAPSHOT" :classifier "linux-x86_64"]]}
              :windows {:dependencies [[org.uncomplicate/illamanati-cuda "0.5.0-SNAPSHOT"]
-                                      [org.uncomplicate/snapdragan-cuda "0.7.0-SNAPSHOT"]
+                                      [org.uncomplicate/snapdragan-cuda "0.8.0-SNAPSHOT"]
                                       [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-SNAPSHOT"]
                                       [org.uncomplicate/neanderthal-mkl "0.65.0-SNAPSHOT"]
                                       [org.bytedeco/mkl "2025.3-1.5.13" :classifier "windows-x86_64-redist"]
