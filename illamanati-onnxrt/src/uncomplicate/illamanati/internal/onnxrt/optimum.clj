@@ -18,42 +18,18 @@
             [uncomplicate.diamond
              [tensor :refer [input output Transfer shape data-type]]
              [onnxrt :refer [*onnx-options*]]]
-            [uncomplicate.diamond.internal.protocols
-             :refer [neanderthal-factory DiamondFactoryProvider Initializable]]
+            [uncomplicate.diamond.internal.protocols :refer [neanderthal-factory Initializable]]
             [uncomplicate.diamond.internal.onnxrt
              [core :as onnx
               :refer [onnx-tensor cast-type input-type-info output-type-info tensor-type
-                      bind-input! bind-output! override-dimension! available-providers
-                      execution-mode! cpu-mem-arena! disable-per-session-threads!
-                      graph-optimization! inter-op-threads! append-provider! threading-options
-                      environment memory-info session options]]
+                      bind-input! bind-output! environment memory-info session options
+                      threading-options]]
              [model :refer [create-tz tensor-desc]]]
             [uncomplicate.illamanati.internal.protocols :refer [TokenizerProvider StepEngineProvider]]
             [uncomplicate.illamanati.internal.onnxrt.inference
-             :refer [embedding-model core-decoder-model]]
+             :refer [embedding-model core-decoder-model universal-options! ->StepEngine]]
             [uncomplicate.snapdragan :refer [sampler]])
   (:import [clojure.lang IFn AFn]))
-
-(defn universal-options!
-  ([opt! args]
-   (let [available-ep (set (available-providers))]
-     (doto opt!
-       (execution-mode! :sequential)
-       (cpu-mem-arena! false)
-       (override-dimension! "batch_size" (:batch-size args))
-       (override-dimension! "num_images" 0)
-       (override-dimension! "image_length" 0)
-       (disable-per-session-threads!)
-       (graph-optimization! (:graph-optimization args))
-       ;; (intra-op-threads! 10)
-       (inter-op-threads! 1))
-     (doseq [ep (:ep args)]
-       (append-provider! opt!
-                         (or (available-ep ep)
-                             (dragan-says-ex (format "Execution provider %s is not available." ep)
-                                             {:requested ep :available available-ep}))
-                         (args ep))))
-   opt!))
 
 (deftype EmbeddingDecoderModel [fact neand-fact mem-info embedding-model! decoder-model!
                                 num-logits-name decode-num-logits onnx-decode-num-logits]
@@ -94,15 +70,15 @@
     (let [neand-fact (neanderthal-factory fact)
           num-logits-info (cast-type num-logits-type-info)
           num-logits-type (tensor-type num-logits-info)]
-      (let-release [decode-num-logits (vctr (neanderthal-factory neand-fact num-logits-type) [1])
+      #dbg (let-release [decode-num-logits (vctr (neanderthal-factory neand-fact num-logits-type) [1])
                     onnx-decode-num-logits (onnx-tensor mem-info (buffer decode-num-logits))
                     embedding (embedding-model fact mem-info embedding-sess embedding-opt
                                                embedding-inputs embedding-outputs)
                     decoder (core-decoder-model fact mem-info decoder-sess decoder-opt
                                                 decoder-inputs decoder-outputs
                                                 (output embedding) context-len)]
-        (bind-input! (.-prefill-bind decoder) num-logits-name onnx-decode-num-logits)
         (bind-input! (.-decode-bind decoder) num-logits-name onnx-decode-num-logits)
+        (bind-input! (.-prefill-bind decoder) num-logits-name onnx-decode-num-logits)
         (->EmbeddingDecoderModel fact neand-fact mem-info embedding decoder
                                  num-logits-name decode-num-logits onnx-decode-num-logits)))))
 
@@ -146,44 +122,6 @@
                                                 decoder-inputs decoder-outputs
                                                 nil context-len)]
         (->CopyLogitsDecoderModel fact neand-fact mem-info decoder)))))
-
-(deftype OptimumStepEngine [fact neand-fact
-                            mem-info decoder-model! sample!
-                            ^long batch-size]
-  Releaseable
-  (release [_]
-    (release decoder-model!)
-    (release sample!)
-    (release mem-info))
-  DiamondFactoryProvider
-  (diamond-factory [_]
-    fact)
-  Transfer
-  (input [_]
-    (input decoder-model!))
-  (output [_]
-    (output decoder-model!))
-  Initializable
-  (init [this _]
-    this)
-  IFn
-  (invoke [_ prefill-ids arg]
-    (let [seq-len (if (number? (first prefill-ids))
-                    (count prefill-ids)
-                    (max (map count prefill-ids)))
-          ids-shape [batch-size seq-len]
-          ids-dt (data-type (input decoder-model!))]
-      (with-release [ids-desc (tensor-desc fact neand-fact ids-shape ids-dt)
-                     ids (create-tz fact neand-fact ids-desc)
-                     onnx-ids (onnx-tensor mem-info ids-shape (buffer ids) ids-dt)]
-        (transfer! prefill-ids (view-ge (view-vctr ids) seq-len batch-size))
-        (decoder-model! ids onnx-ids)
-        (sample! arg))))
-  (invoke [_ arg]
-    (decoder-model!)
-    (sample! arg))
-  (applyTo [this xs]
-    (AFn/applyToHelper this xs)))
 
 (defrecord OptimumProvider [merged-args tok]
   Releaseable
@@ -233,9 +171,8 @@
                       sample (sampler (view-ge (view-vctr (output decoder))
                                                vocab-size batch-size)
                                       (view-vctr (input decoder)))]
-          (->OptimumStepEngine fact (neanderthal-factory fact)
-                               mem-info decoder sample
-                               batch-size)))))
+          (->StepEngine fact (neanderthal-factory fact)
+                        mem-info decoder sample batch-size)))))
   TokenizerProvider
   (tokenizer [this]
     tok))

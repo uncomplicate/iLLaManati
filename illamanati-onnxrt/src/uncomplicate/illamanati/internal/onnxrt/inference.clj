@@ -13,17 +13,21 @@
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer]]
             [uncomplicate.neanderthal
-             [core :refer [view-vctr entry! vctr]]
+             [core :refer [view-vctr view-ge entry! vctr transfer!]]
              [block :refer [buffer]]]
             [uncomplicate.diamond.tensor
              :refer [input output Transfer shape data-type layout view-tz offset! transformer]]
-            [uncomplicate.diamond.internal.protocols :refer [neanderthal-factory]]
+            [uncomplicate.diamond.internal.protocols
+             :refer [neanderthal-factory DiamondFactoryProvider Initializable]]
             [uncomplicate.diamond.internal.onnxrt
              [constants :refer [onnx-data-type-pointer]]
              [core :as onnx
               :refer [free mutable-data onnx-tensor io-binding input-count output-count cast-type
                       value-tensor-info input-type-info output-type-info tensor-type
-                      bind-input! bind-output! runner* synchronize-inputs! synchronize-outputs!]]
+                      bind-input! bind-output! runner* synchronize-inputs! synchronize-outputs!
+                      override-dimension! available-providers
+                      execution-mode! cpu-mem-arena! disable-per-session-threads!
+                      graph-optimization! inter-op-threads! append-provider! threading-options]]
              [impl :refer [*ort-api* *default-allocator*
                            bind-input* bind-output* input-name* output-name*]]
              [model :refer [create-tz tensor-desc]]])
@@ -373,3 +377,59 @@
         (->EmbeddingModel fact mem-info sess opt run-session! prefill-bind decode-bind
                           input-ids-name decode-input-ids onnx-decode-input-ids
                           embeds-name decode-embeds onnx-decode-embeds)))))
+
+(defn universal-options!
+  ([opt! args]
+   (let [available-ep (set (available-providers))]
+     (doto opt!
+       (execution-mode! :sequential)
+       (cpu-mem-arena! false)
+       (override-dimension! "batch_size" (:batch-size args))
+       (disable-per-session-threads!)
+       (graph-optimization! (:graph-optimization args))
+       (inter-op-threads! 1))
+     (doseq [ep (:ep args)]
+       (append-provider! opt!
+                         (or (available-ep ep)
+                             (dragan-says-ex (format "Execution provider %s is not available." ep)
+                                             {:requested ep :available available-ep}))
+                         (args ep))))
+   opt!))
+
+(deftype StepEngine [fact neand-fact
+                     mem-info decoder-model! sample!
+                     ^long batch-size]
+  Releaseable
+  (release [_]
+    (release decoder-model!)
+    (release sample!)
+    (release mem-info))
+  DiamondFactoryProvider
+  (diamond-factory [_]
+    fact)
+  Transfer
+  (input [_]
+    (input decoder-model!))
+  (output [_]
+    (output decoder-model!))
+  Initializable
+  (init [this _]
+    this)
+  IFn
+  (invoke [_ prefill-ids arg]
+    (let [seq-len (if (number? (first prefill-ids))
+                    (count prefill-ids)
+                    (max (map count prefill-ids)))
+          ids-shape [batch-size seq-len]
+          ids-dt (data-type (input decoder-model!))]
+      (with-release [ids-desc (tensor-desc fact neand-fact ids-shape ids-dt)
+                     ids (create-tz fact neand-fact ids-desc)
+                     onnx-ids (onnx-tensor mem-info ids-shape (buffer ids) ids-dt)]
+        (transfer! prefill-ids (view-ge (view-vctr ids) seq-len batch-size))
+        (decoder-model! ids onnx-ids)
+        (sample! arg))))
+  (invoke [_ arg]
+    (decoder-model!)
+    (sample! arg))
+  (applyTo [this xs]
+    (AFn/applyToHelper this xs)))
