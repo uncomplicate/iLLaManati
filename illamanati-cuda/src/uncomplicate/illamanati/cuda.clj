@@ -41,10 +41,8 @@
      (if (and fact (= :cuda (device (neanderthal-factory fact :float))))
        (cuda-generator fact provider in-chan tok-chan)
        (let-release [fact (cuda-factory)]
-         (let [release-fact (cuda-generator fact provider in-chan tok-chan)
-               ctx (.-ctx fact)]
-           (io-thread (in-context ctx (release (<!! release-fact)))
-                      provider)))))))
+         (let [release-fact (cuda-generator fact provider in-chan tok-chan)]
+           (io-thread (release (<!! release-fact)) provider)))))))
 
 ;; ======= core.async Flow step function ==========================================================
 

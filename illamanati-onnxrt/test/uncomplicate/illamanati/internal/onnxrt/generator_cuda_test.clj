@@ -33,5 +33,5 @@
 
 (with-default
   #_(test-generator gemma-3-genai-cuda "../data/Gemma-3-ONNX/gemma-3-4b-it/" [" and" " largest" " city" " of" " Serbia" "."])
-  #_(test-async-generator gemma-3-genai-cuda "../data/Gemma-3-ONNX/gemma-3-4b-it/" " of Serbia. It is a")
+  (test-async-generator gemma-3-genai-cuda "../data/Gemma-3-ONNX/gemma-3-4b-it/" " of Serbia. It is a")
   (test-flow-generator gemma-3-genai-cuda "../data/Gemma-3-ONNX/gemma-3-4b-it/" " of Serbia. It is a"))

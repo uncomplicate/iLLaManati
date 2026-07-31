@@ -422,7 +422,8 @@
                                             (- batch-data-len (long vocab-size)) 0 vocab-size batch-size)
                      ge-decode-logits (view-ge (view-vctr (output decoder-model!)) vocab-size batch-size)]
         (decoder-model! input-x onnx-input-x logits onnx-logits)
-        (copy! last-logits ge-decode-logits);;TODO cuda might fail here because of synchronization!
+        (copy! last-logits ge-decode-logits)
+        (synchronize-outputs! (decode-bind decoder-model!))
         (output decoder-model!))))
   (invoke [_]
     (decoder-model!))
