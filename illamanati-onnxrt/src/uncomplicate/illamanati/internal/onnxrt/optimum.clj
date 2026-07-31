@@ -70,7 +70,7 @@
     (let [neand-fact (neanderthal-factory fact)
           num-logits-info (cast-type num-logits-type-info)
           num-logits-type (tensor-type num-logits-info)]
-      #dbg (let-release [decode-num-logits (vctr (neanderthal-factory neand-fact num-logits-type) [1])
+      (let-release [decode-num-logits (vctr (neanderthal-factory neand-fact num-logits-type) [1])
                     onnx-decode-num-logits (onnx-tensor mem-info (buffer decode-num-logits))
                     embedding (embedding-model fact mem-info embedding-sess embedding-opt
                                                embedding-inputs embedding-outputs)
