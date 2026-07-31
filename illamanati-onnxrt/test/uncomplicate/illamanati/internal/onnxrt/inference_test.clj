@@ -115,7 +115,7 @@
       (transfer! (repeat 1) prefill-mask)
       (gemma3 input-ids onnx-input-ids logits onnx-logits)
       (gemma3 input-ids onnx-input-ids logits onnx-logits)
-      (seq (transfer! logits (double-array 3))) => [-12.21875 2.3125 2.595703125]
-      (transfer! (range 1 batch-size) (.decode-input-x gemma3)) ;;TODO do it in text-model initialization
-      (seq (transfer! (gemma3) (double-array 3))) => [-13.21875 4.171875 0.7041015625]
+      (seq (transfer! logits (double-array 3))) => [-12.84375 -1.0361328125 -0.69482421875]
+      (transfer! (range 1 batch-size) (.decode-input-x gemma3))
+      (seq (transfer! (gemma3) (double-array 3))) => [-16.296875 14.2421875 2.587890625]
       (gemma3) => (gemma3))))

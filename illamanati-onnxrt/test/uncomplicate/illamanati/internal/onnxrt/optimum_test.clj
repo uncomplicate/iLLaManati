@@ -22,7 +22,9 @@
              [core :refer :all]
              [model :refer [tensor-desc create-tz]]]
             [uncomplicate.snapdragan :refer [sampler]]
-            [uncomplicate.illamanati.internal.onnxrt.optimum :refer :all])
+            [uncomplicate.illamanati.internal.onnxrt
+             [inference :refer :all]
+             [optimum :refer :all]])
   (:import clojure.lang.ExceptionInfo))
 
 (let [fact *diamond-factory*
@@ -55,10 +57,10 @@
                  onnx-logits (onnx-tensor mem-info [batch-size seq-len vocab-size] (buffer logits) :float)
                  sess-embedding (session env "../data/gemma-3-4b-it-ONNX/onnx/embed_tokens_q4f16.onnx" opt)
                  sess-text (session env "../data/gemma-3-4b-it-ONNX/onnx/decoder_model_merged_q4f16.onnx" opt)
-                 gemma-3! (embedding-decoder-model fact mem-info sess-embedding opt sess-text opt-text
-                                                   ["input_ids"] ["inputs_embeds"]
-                                                   ["inputs_embeds" "attention_mask" "num_logits_to_keep"] ["logits"]
-                                                   12)]
+                 gemma-3! (num-logits-decoder-model fact mem-info sess-embedding opt sess-text opt-text
+                                                    ["input_ids"] ["inputs_embeds"]
+                                                    ["inputs_embeds" "attention_mask" "num_logits_to_keep"] ["logits"]
+                                                    12)]
     (facts
       "ONNX Gemma3 4b model test."
       (transfer! [2 19727 9619 563 506 5279] (view-vctr input-ids))
@@ -91,7 +93,7 @@
                  onnx-input-ids (onnx-tensor mem-info [batch-size seq-len] (buffer input-ids) :long)
                  sess-text (session env "../data/gemma-3-1b-it-ONNX-GQA/onnx/model_q4f16.onnx" opt-text)
                  gemma-3! (copy-logits-decoder-model fact mem-info sess-text opt-text
-                                                     ["input_ids" "attention_mask"] ["logits"] 12)]
+                                                     ["input_ids" "attention_mask"] ["logits"] nil 12)]
     (facts
       "ONNX Gemma3 1b model test."
       (transfer! [2 19727 9619 563 506 5279] (view-vctr input-ids))

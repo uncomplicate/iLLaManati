@@ -16,6 +16,9 @@
              [core :refer []]]))
 
 (defn async-encoder
+  "Creates an encoder that asynchronously tokenizes textual prompts received from `text-chan`
+  and puts the sequence of tokens on the `ids-chan`. `provider` is a tokenizer or any object
+  that can provide a tokenizer. Currently supported tokenizers are Sentencepiece and Hugging Face Tokenizer."
   ([provider text-chan ids-chan]
    (io-thread
     (let [tok (api/tokenizer provider)]
@@ -30,6 +33,11 @@
    (async-encoder provider text-chan (chan))))
 
 (defn async-decoder
+  "Creates a decoder that asynchronously decodes singular tokens from `id-chan`
+  and puts the decoded string on the `text-chan`. `provider` is a tokenizer or any object
+  that can provide a tokenizer. The tokens are decoded by a stateful streaming tokenizer,
+  which takes care of special cases and multi-id strings.
+  "
   ([provider id-chan text-chan]
    (io-thread
     (let [decoder ((api/tokenizer provider))]
@@ -45,6 +53,10 @@
    (async-decoder tokenizer id-chan (chan))))
 
 (defn async-generator
+  "Creates a token generator that asynchronously generates tokens until stopped,
+  either internally (EOS), or externally (by closing the in-chan, or putting `:stop` on `in-chan`).
+  The `provider` determines the model and implementation technology of the token generator.
+  For available providers, please see technology-specific iLLaManati sub-projects."
   ([provider in-chan tok-chan]
    (api/generator provider in-chan tok-chan)
    tok-chan)
@@ -52,8 +64,9 @@
    (async-generator provider in-chan (chan))))
 
 (defn encoder
+  "The text encoder step-fn compatible with core.async Flow processes. Please see the `:describe` map."
   ([]
-   {:params {:tokenizer "Tokenizer"}
+   {:params {:tokenizer "Tokenizer provider for this encoder"}
     :ins {:in "Text"}
     :outs {:out "A sequence of token ids"}})
   ([args]
@@ -65,10 +78,11 @@
      [tokenizer {:out [(api/ids encoding)]}])))
 
 (defn decoder
+  "The token decoder step-fn compatible with core.async Flow processes. Please see the `:describe` map."
   ([]
-   {:params {:tokenizer "Tokenizer"}
-    :ins {:in "Token id"}
-    :outs {:out "Token text"}})
+   {:params {:tokenizer "Tokenizer provider for this encoder"}
+    :ins {:in "Single token id"}
+    <:outs {:out "Token text, when the token is complete."}})
   ([args]
    ((api/tokenizer (:tokenizer args))))
   ([decoder _]
@@ -78,5 +92,9 @@
               (when-not (= "" decoded-part)
                 {:out [decoded-part]}))]))
 
-(defn generator-process [provider]
+(defn generator-process
+  "Token generator process compatible with core.async Flow processes. `provider` determines the model
+  and implementation technology of the token generator. For available providers, please see
+  technology-specific iLLaManati sub-projects."
+  [provider]
   (process (api/generator provider)))
