@@ -33,6 +33,10 @@
              [model :refer [create-tz tensor-desc]]])
   (:import [clojure.lang IFn AFn]))
 
+(defprotocol OnnxLLM
+  (prefill-bind [this])
+  (decode-bind [this]))
+
 (defprotocol KVManager
   (base-tz [this])
   (max-seq-len [this])
@@ -203,6 +207,11 @@
     decode-input-x)
   (output [_]
     decode-logits)
+  OnnxLLM
+  (prefill-bind [_]
+    prefill-bind)
+  (decode-bind [_]
+    decode-bind)
   IFn
   (invoke [this input-x onnx-input-x logits onnx-logits]
     (let [seq-len (long (get (shape input-x) 1))
@@ -334,6 +343,11 @@
     decode-input-ids)
   (output [_]
     decode-embeds)
+  OnnxLLM
+  (prefill-bind [_]
+    prefill-bind)
+  (decode-bind [_]
+    decode-bind)
   IFn
   (invoke [this onnx-input-ids onnx-embeds]
     (bind-input! prefill-bind input-ids-name onnx-input-ids)
@@ -390,6 +404,11 @@
   Initializable
   (init [this _]
     this)
+  OnnxLLM
+  (prefill-bind [_]
+    (prefill-bind decoder-model!))
+  (decode-bind [_]
+    (decode-bind decoder-model!))
   IFn
   (invoke [_ input-x onnx-input-x]
     (let [[batch-size seq-len vocab-size :as logits-shape]

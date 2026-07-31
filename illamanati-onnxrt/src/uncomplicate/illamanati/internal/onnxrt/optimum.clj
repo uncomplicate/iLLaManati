@@ -28,11 +28,11 @@
             [uncomplicate.illamanati.internal.protocols :refer [TokenizerProvider StepEngineProvider]]
             [uncomplicate.illamanati.internal.onnxrt.inference
              :refer [embedding-model core-decoder-model universal-options! ->StepEngine
-                     copy-logits-decoder-model]]
+                     copy-logits-decoder-model OnnxLLM prefill-bind decode-bind]]
             [uncomplicate.snapdragan :refer [sampler]])
   (:import [clojure.lang IFn AFn]))
 
-(deftype EmbeddingDecoderModel [fact neand-fact mem-info embedding-model! decoder-model!
+(deftype NumLogitsDecoderModel [fact neand-fact mem-info embedding-model! decoder-model!
                                 num-logits-name decode-num-logits onnx-decode-num-logits]
   Releaseable
   (release [_]
@@ -45,6 +45,11 @@
     (input embedding-model!))
   (output [_]
     (output decoder-model!))
+  OnnxLLM
+  (prefill-bind [_]
+    (prefill-bind decoder-model!))
+  (decode-bind [_]
+    (decode-bind decoder-model!))
   Initializable
   (init [this _]
     this)
@@ -62,11 +67,11 @@
     (decoder-model!))
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
-
-(defn embedding-decoder-model [fact mem-info embedding-sess embedding-opt decoder-sess decoder-opt
-                               embedding-inputs embedding-outputs
-                               [_ _ num-logits-name :as decoder-inputs] decoder-outputs
-                               context-len]
+;;TODO num-logits should be decoder, not embedding+decoder!
+(defn num-logits-decoder-model [fact mem-info embedding-sess embedding-opt decoder-sess decoder-opt
+                                embedding-inputs embedding-outputs
+                                [_ _ num-logits-name :as decoder-inputs] decoder-outputs
+                                context-len]
   (with-release [num-logits-type-info (input-type-info decoder-sess 2)]
     (let [neand-fact (neanderthal-factory fact)
           num-logits-info (cast-type num-logits-type-info)
@@ -78,9 +83,9 @@
                     decoder (core-decoder-model fact mem-info decoder-sess decoder-opt
                                                 decoder-inputs decoder-outputs
                                                 (output embedding) context-len)]
-        (bind-input! (.-decode-bind decoder) num-logits-name onnx-decode-num-logits)
-        (bind-input! (.-prefill-bind decoder) num-logits-name onnx-decode-num-logits)
-        (->EmbeddingDecoderModel fact neand-fact mem-info embedding decoder
+        (bind-input! (decode-bind decoder) num-logits-name onnx-decode-num-logits)
+        (bind-input! (prefill-bind decoder) num-logits-name onnx-decode-num-logits)
+        (->NumLogitsDecoderModel fact neand-fact mem-info embedding decoder
                                  num-logits-name decode-num-logits onnx-decode-num-logits)))))
 
 (defrecord OptimumProvider [merged-args tok]
@@ -118,12 +123,12 @@
                       decoder (if embedding
                                 (let-release [embedding-opt (options decoder-opt)
                                               embedding-sess (session env (format "%s/%s" model-path embedding) embedding-opt)]
-                                  (embedding-decoder-model fact mem-info
-                                                           embedding-sess embedding-opt
-                                                           decoder-sess decoder-opt
-                                                           embedding-inputs embedding-outputs
-                                                           decoder-inputs decoder-outputs
-                                                           context-len))
+                                  (num-logits-decoder-model fact mem-info
+                                                            embedding-sess embedding-opt
+                                                            decoder-sess decoder-opt
+                                                            embedding-inputs embedding-outputs
+                                                            decoder-inputs decoder-outputs
+                                                            context-len))
                                 (copy-logits-decoder-model fact mem-info decoder-sess decoder-opt
                                                            decoder-inputs decoder-outputs
                                                            nil context-len))
