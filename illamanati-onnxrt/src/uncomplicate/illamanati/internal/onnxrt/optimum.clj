@@ -12,7 +12,7 @@
              [core :refer [let-release with-release Releaseable release Info info]]
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.neanderthal
-             [core :refer [transfer! view-vctr view-ge submatrix copy! vctr]]
+             [core :refer [transfer! view-vctr view-ge vctr]]
              [block :refer [buffer]]]
             [uncomplicate.neanderthal.internal.api :refer [device MemoryContext]]
             [uncomplicate.diamond
@@ -27,7 +27,8 @@
              [model :refer [create-tz tensor-desc]]]
             [uncomplicate.illamanati.internal.protocols :refer [TokenizerProvider StepEngineProvider]]
             [uncomplicate.illamanati.internal.onnxrt.inference
-             :refer [embedding-model core-decoder-model universal-options! ->StepEngine]]
+             :refer [embedding-model core-decoder-model universal-options! ->StepEngine
+                     copy-logits-decoder-model]]
             [uncomplicate.snapdragan :refer [sampler]])
   (:import [clojure.lang IFn AFn]))
 
@@ -82,47 +83,6 @@
         (->EmbeddingDecoderModel fact neand-fact mem-info embedding decoder
                                  num-logits-name decode-num-logits onnx-decode-num-logits)))))
 
-(deftype CopyLogitsDecoderModel [fact neand-fact mem-info decoder-model!]
-  Releaseable
-  (release [_]
-    (release decoder-model!))
-  Transfer
-  (input [_]
-    (input decoder-model!))
-  (output [_]
-    (output decoder-model!))
-  Initializable
-  (init [this _]
-    this)
-  IFn
-  (invoke [_ input-ids onnx-input-ids]
-    (let [[batch-size seq-len vocab-size :as logits-shape]
-          (assoc (shape (output decoder-model!)) 1 (get (shape input-ids) 1) )
-          batch-data-len (* seq-len (long vocab-size))
-          logits-dt (data-type (output decoder-model!))]
-      (with-release [logits-desc (tensor-desc fact neand-fact logits-shape logits-dt)
-                     logits (create-tz fact neand-fact logits-desc)
-                     onnx-logits (onnx-tensor mem-info (take 3 logits-shape) (buffer logits) logits-dt)
-                     last-logits (submatrix (view-ge (view-vctr logits) batch-data-len batch-size)
-                                            (- batch-data-len (long vocab-size)) 0 vocab-size batch-size)
-                     ge-decode-logits (view-ge (view-vctr (output decoder-model!)) vocab-size batch-size)]
-        (decoder-model! input-ids onnx-input-ids logits onnx-logits)
-        (copy! last-logits ge-decode-logits))))
-  (invoke [_]
-    (decoder-model!))
-  (applyTo [this xs]
-    (AFn/applyToHelper this xs)))
-
-(defn copy-logits-decoder-model [fact mem-info decoder-sess decoder-opt
-                                 decoder-inputs decoder-outputs
-                                 context-len]
-  (with-release [num-logits-type-info (input-type-info decoder-sess 2)]
-    (let [neand-fact (neanderthal-factory fact)]
-      (let-release [decoder (core-decoder-model fact mem-info decoder-sess decoder-opt
-                                                decoder-inputs decoder-outputs
-                                                nil context-len)]
-        (->CopyLogitsDecoderModel fact neand-fact mem-info decoder)))))
-
 (defrecord OptimumProvider [merged-args tok]
   Releaseable
   (release [_]
@@ -140,8 +100,7 @@
     (:device merged-args))
   StepEngineProvider
   (step-engine [_ fact]
-    (let [vect-fact (neanderthal-factory fact)
-          {:keys [batch-size hidden-size vocab-size context-len model-path
+    (let [{:keys [batch-size hidden-size vocab-size context-len model-path
                   embedding embedding-inputs embedding-outputs
                   decoder decoder-inputs decoder-outputs]} merged-args]
       (with-release [env-options (threading-options (:env-options merged-args))]
@@ -167,7 +126,7 @@
                                                            context-len))
                                 (copy-logits-decoder-model fact mem-info decoder-sess decoder-opt
                                                            decoder-inputs decoder-outputs
-                                                           context-len))
+                                                           nil context-len))
                       sample (sampler (view-ge (view-vctr (output decoder))
                                                vocab-size batch-size)
                                       (view-vctr (input decoder)))]

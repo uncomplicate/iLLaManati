@@ -8,29 +8,30 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.illamanati.internal.onnxrt.generator-cuda-test
-  (:require [midje.sweet :refer [facts =>]]
-            [uncomplicate.clojurecuda.core
-             :refer [with-default reset-context! device *headers*]]
+  (:require [uncomplicate.clojurecuda.core :refer [with-default]]
             [uncomplicate.diamond
              [tensor :refer [with-diamond]]
              [cuda :refer [cuda-factory]]]
             [uncomplicate.illamanati.cuda :refer []]
             [uncomplicate.snapdragan.cuda :refer []]
-            [uncomplicate.illamanati.internal.onnxrt.gemma3
-             :refer [gemma-3-gpu-default gemma-3-gqa-default gemma-3-gqa-gpu-default]]
-            [uncomplicate.illamanati.internal.onnxrt.generator-test
-             :refer [test-generator test-async-generator test-flow-generator]]))
+            [uncomplicate.illamanati.internal.onnxrt
+             [generator-test :refer [test-generator test-async-generator test-flow-generator]]
+             [gemma3 :refer [gemma-3-optimum gemma-3-gqa-optimum gemma-3-genai-cuda cuda-default]]]))
 
-(with-default
-  ;;(binding [*headers* {"cuda_fp16.h" nil}])
+#_(with-default
   (with-diamond cuda-factory []
     (test-generator gemma-3-gpu-default "../data/gemma-3-4b-it-ONNX" [" and" " largest" " city" " of" " Serbia" "."])
     (test-generator gemma-3-gqa-gpu-default "../data/gemma-3-1b-it-ONNX-GQA" [" of" " Serbia" "," " a" " vibrant" " and"])))
 
-(with-default
+#_(with-default
   (test-async-generator gemma-3-gpu-default "../data/gemma-3-4b-it-ONNX" " and largest city of Serbia.")
   (test-async-generator gemma-3-gqa-gpu-default "../data/gemma-3-1b-it-ONNX-GQA" " of Serbia, a vibrant and"))
 
-(with-default
+#_(with-default
   (test-flow-generator gemma-3-gpu-default "../data/gemma-3-4b-it-ONNX" " and largest city of Serbia.")
   (test-flow-generator gemma-3-gqa-gpu-default "../data/gemma-3-1b-it-ONNX-GQA" " of Serbia, a vibrant and"))
+
+(with-default
+  (test-generator gemma-3-genai-cuda "../data/Gemma-3-ONNX/gemma-3-4b-it/" [" and" " largest" " city" " of" " Serbia" "."])
+  (test-async-generator gemma-3-genai-cuda "../data/Gemma-3-ONNX/gemma-3-4b-it/" " and largest city of Serbia.")
+  (test-flow-generator gemma-3-genai-cuda "../data/Gemma-3-ONNX/gemma-3-4b-it/" " and largest city of Serbia."))

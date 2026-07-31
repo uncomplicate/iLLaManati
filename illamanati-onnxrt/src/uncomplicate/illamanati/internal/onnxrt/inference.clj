@@ -13,7 +13,7 @@
              [utils :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :refer [safe get-pointer]]
             [uncomplicate.neanderthal
-             [core :refer [view-vctr view-ge entry! vctr transfer!]]
+             [core :refer [view-vctr view-ge entry! vctr transfer! submatrix copy!]]
              [block :refer [buffer]]]
             [uncomplicate.diamond.tensor
              :refer [input output Transfer shape data-type layout view-tz offset! transformer]]
@@ -377,6 +377,85 @@
         (->EmbeddingModel fact mem-info sess opt run-session! prefill-bind decode-bind
                           input-ids-name decode-input-ids onnx-decode-input-ids
                           embeds-name decode-embeds onnx-decode-embeds)))))
+
+(deftype CopyLogitsDecoderModel [fact neand-fact mem-info decoder-model!]
+  Releaseable
+  (release [_]
+    (release decoder-model!))
+  Transfer
+  (input [_]
+    (input decoder-model!))
+  (output [_]
+    (output decoder-model!))
+  Initializable
+  (init [this _]
+    this)
+  IFn
+  (invoke [_ input-x onnx-input-x]
+    (let [[batch-size seq-len vocab-size :as logits-shape]
+          (assoc (shape (output decoder-model!)) 1 (get (shape input-x) 1) )
+          batch-data-len (* seq-len (long vocab-size))
+          logits-dt (data-type (output decoder-model!))]
+      (with-release [logits-desc (tensor-desc fact neand-fact logits-shape logits-dt)
+                     logits (create-tz fact neand-fact logits-desc)
+                     onnx-logits (onnx-tensor mem-info (take 3 logits-shape) (buffer logits) logits-dt)
+                     last-logits (submatrix (view-ge (view-vctr logits) batch-data-len batch-size)
+                                            (- batch-data-len (long vocab-size)) 0 vocab-size batch-size)
+                     ge-decode-logits (view-ge (view-vctr (output decoder-model!)) vocab-size batch-size)]
+        (decoder-model! input-x onnx-input-x logits onnx-logits)
+        (copy! last-logits ge-decode-logits);;TODO cuda might fail here because of synchronization!
+        (output decoder-model!))))
+  (invoke [_]
+    (decoder-model!))
+  (applyTo [this xs]
+    (AFn/applyToHelper this xs)))
+
+(defn copy-logits-decoder-model [fact mem-info decoder-sess decoder-opt
+                                 decoder-inputs decoder-outputs input-x context-len]
+  (let [neand-fact (neanderthal-factory fact)]
+    (let-release [decoder (core-decoder-model fact mem-info decoder-sess decoder-opt
+                                              decoder-inputs decoder-outputs
+                                              input-x context-len)]
+      (->CopyLogitsDecoderModel fact neand-fact mem-info decoder))))
+
+(deftype EmbeddingDecoderModel [fact neand-fact mem-info embedding-model! decoder-model!]
+  Releaseable
+  (release [_]
+    (release decoder-model!)
+    (release embedding-model!))
+  Transfer
+  (input [_]
+    (input embedding-model!))
+  (output [_]
+    (output decoder-model!))
+  Initializable
+  (init [this _]
+    this)
+  IFn
+  (invoke [_ input-ids onnx-input-ids]
+    (let [embeds-shape (assoc (shape (output embedding-model!)) 1 (get (shape input-ids) 1))
+          embeds-dt (data-type (output embedding-model!))]
+      (with-release [embeds-desc (tensor-desc fact neand-fact embeds-shape embeds-dt)
+                     embeds (create-tz fact neand-fact embeds-desc)
+                     onnx-embeds (onnx-tensor mem-info (take 3 embeds-shape) (buffer embeds) embeds-dt)]
+        (embedding-model! onnx-input-ids onnx-embeds)
+        (decoder-model! embeds onnx-embeds))))
+  (invoke [_]
+    (embedding-model!)
+    (decoder-model!))
+  (applyTo [this xs]
+    (AFn/applyToHelper this xs)))
+
+(defn embedding-decoder-model [fact mem-info embedding-sess embedding-opt decoder-sess decoder-opt
+                               embedding-inputs embedding-outputs
+                               decoder-inputs decoder-outputs
+                               context-len]
+  (let-release [embedding (embedding-model fact mem-info embedding-sess embedding-opt
+                                           embedding-inputs embedding-outputs)
+                decoder (core-decoder-model fact mem-info decoder-sess decoder-opt
+                                            decoder-inputs decoder-outputs
+                                            (output embedding) context-len)]
+    (->EmbeddingDecoderModel fact (neanderthal-factory fact) mem-info embedding decoder)))
 
 (defn universal-options!
   ([opt! args]
