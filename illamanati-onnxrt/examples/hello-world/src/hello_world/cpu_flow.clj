@@ -15,7 +15,7 @@
             [uncomplicate.illamanati.internal.onnxrt.gemma3 :refer [gemma-3-genai-cpu]]))
 
 ;; Before you expect this to work, download this model from Hugging Face: https://huggingface.co/onnxruntime/Gemma-3-ONNX/gemma-3-4b-it
-;; This is multi-GB repository, you only need:
+;; That is a multi-GB repository, you only need:
 ;; - cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/gemma-3-text.onnx
 ;; - cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/gemma-3-embedding.onnx
 ;; Also, you have to download the tokenizer model for Gemma 3 from Google's Gemma 3 repository, for example from

@@ -26,7 +26,7 @@
                       bind-input! bind-output! override-dimension! available-providers
                       execution-mode! cpu-mem-arena! disable-per-session-threads!
                       graph-optimization! inter-op-threads! append-provider! threading-options
-                      environment memory-info session options]]
+                      environment memory-info session options synchronize-outputs!]]
              [model :refer [create-tz tensor-desc]]]
             [uncomplicate.illamanati.internal.protocols :refer [TokenizerProvider StepEngineProvider]]
             [uncomplicate.illamanati.internal.onnxrt.inference
@@ -123,7 +123,8 @@
                    (view-vctr position-ids))
         (swap! position-counter! + seq-len) ;;todo support rolling kvs; todo write specialized kernel;
         (bind-input! (prefill-bind decoder-model!) position-ids-name onnx-position-ids)
-        (decoder-model! embeds onnx-embeds))))
+        (decoder-model! embeds onnx-embeds)
+        (synchronize-outputs! (prefill-bind decoder-model!)))))
   (invoke [_]
     (entry! (view-vctr decode-position-ids) (swap! position-counter! inc))
     (decoder-model!))

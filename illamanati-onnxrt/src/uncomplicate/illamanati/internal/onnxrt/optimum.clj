@@ -67,7 +67,7 @@
     (decoder-model!))
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
-;;TODO num-logits should be decoder, not embedding+decoder!
+;;TODO num-logits should be a decoder, not embedding+decoder!
 (defn num-logits-decoder-model [fact mem-info embedding-sess embedding-opt decoder-sess decoder-opt
                                 embedding-inputs embedding-outputs
                                 [_ _ num-logits-name :as decoder-inputs] decoder-outputs

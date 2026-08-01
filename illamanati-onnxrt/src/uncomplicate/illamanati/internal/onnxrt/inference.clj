@@ -423,7 +423,7 @@
                      ge-decode-logits (view-ge (view-vctr (output decoder-model!)) vocab-size batch-size)]
         (decoder-model! input-x onnx-input-x logits onnx-logits)
         (copy! last-logits ge-decode-logits)
-        (synchronize-outputs! (decode-bind decoder-model!))
+        (synchronize-outputs! (prefill-bind decoder-model!))
         (output decoder-model!))))
   (invoke [_]
     (decoder-model!))
