@@ -9,7 +9,7 @@
                  ;; which then might clash with the versions that you project includes.
                  ;; If you want to try the Hello World without AOT, just comment out the uncomplicate/deep-diamond
                  ;; dependency!
-                 [org.uncomplicate/deep-diamond-dnnl "0.46.1"]
+                 [uncomplicate/deep-diamond "0.46.1"]
                  [org.uncomplicate/illamanati-base "0.9.0"]
                  [org.uncomplicate/illamanati-onnxrt "0.9.0"]]
 

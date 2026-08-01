@@ -49,17 +49,15 @@
 ;; This will take a few seconds
 (def running-flow (start f))
 
-(resume f)
-
 (inject f [:enc :in] ["Clojure is"])
 
 (thread (loop [s (<!! (:report-chan running-flow))]
-          (if s
-            (if (not= "<end_of_turn" s)
-              (do (print s)
-                  (recur (<!! (:report-chan running-flow))))
-              (stop s))
+          (if (and s (not= "<end_of_turn" s))
+            (do (print s)
+                (recur (<!! (:report-chan running-flow))))
             (stop f))))
+
+(resume f)
 
 ;; My CPU from 2019 gives me stable 15 tokens per second with Gemma 3 4b. Not bad at all.
 
