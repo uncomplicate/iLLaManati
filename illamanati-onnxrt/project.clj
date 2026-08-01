@@ -7,7 +7,7 @@
                  [org.uncomplicate/deep-diamond-dnnl "0.46.1"]
                  [org.uncomplicate/diamond-onnxrt "0.29.0"]
                  [org.uncomplicate/snapdragan-base "0.8.0"]
-                 [org.uncomplicate/illamanati-base "0.9.0-SNAPSHOT"]]
+                 [org.uncomplicate/illamanati-base "0.9.0"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
@@ -21,7 +21,7 @@
                                      *print-length* 128}
                        :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=tru"
                                             "--enable-native-access=ALL-UNNAMED"]}
-             :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.9.0-SNAPSHOT"]
+             :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.9.0"]
                                     [org.uncomplicate/snapdragan-cuda "0.8.0"]
                                     [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-20260730.122756-6"]
                                     [org.uncomplicate/neanderthal-mkl "0.65.0"]
