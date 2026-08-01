@@ -18,7 +18,7 @@
   :profiles {:dev [:dev/all ~(leiningen.core.utils/get-os)]
              :dev/all {}
              :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.6.0"]
-                                    [org.uncomplicate/snapdragan-cuda "0.8.0"]
+                                    #_[org.uncomplicate/snapdragan-cuda "0.8.0"]
                                     [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-20260730.122756-6"]
                                     [org.uncomplicate/neanderthal-mkl "0.65.0"]
                                     [org.bytedeco/mkl "2025.3-1.5.13" :classifier "linux-x86_64-redist"]
