@@ -82,7 +82,7 @@
   ([]
    {:params {:tokenizer "Tokenizer provider for this encoder"}
     :ins {:in "Single token id"}
-    <:outs {:out "Token text, when the token is complete."}})
+    :outs {:out "Token text, when the token is complete."}})
   ([args]
    ((api/tokenizer (:tokenizer args))))
   ([decoder _]
