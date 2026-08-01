@@ -84,7 +84,7 @@
   "Configuration map of the CUDA model exported to be compatible with onnxrunime-genai Gemma3.
   https://huggingface.co/onnxruntime/Gemma-3-ONNX"
   (merge gemma-3-default
-         {:decoder  "gpu/gpu-fp16-io-int4-rtn-block-32/gemma-3-text.onnx"
+         {:decoder "gpu/gpu-fp16-io-int4-rtn-block-32/gemma-3-text.onnx"
           :embedding "gpu/gpu-fp16-io-int4-rtn-block-32/gemma-3-embedding.onnx"
           :embedding-inputs ["input_ids" "image_features"]
           :decoder-inputs ["inputs_embeds" "attention_mask" "position_ids"]

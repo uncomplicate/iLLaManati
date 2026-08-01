@@ -22,6 +22,7 @@
   (:import [clojure.lang IFn AFn Seqable]
            [org.bytedeco.javacpp IntPointer LongPointer ShortPointer BytePointer]
            [org.bytedeco.sentencepiece SentencePieceProcessor Status IntVector StringVector]
+           org.bytedeco.sentencepiece.global.sentencepiece
            uncomplicate.neanderthal.internal.api.IntegerVector))
 
 (defprotocol Encodable
@@ -249,6 +250,25 @@
   (tokens [this]
     (mapv api/tokens this)))
 
+(def ^:const status-codes
+  {sentencepiece/kAborted :aborted
+   sentencepiece/kAlreadyExists :already-exists
+   sentencepiece/kCancelled :cancelled
+   sentencepiece/kDataLoss :data-loss
+   sentencepiece/kDeadlineExceeded :deadline-exceeded
+   sentencepiece/kFailedPrecondition :failed-precondition
+   sentencepiece/kInternal :internal
+   sentencepiece/kInvalidArgument :invalid-argument
+   sentencepiece/kNotFound :not-found
+   sentencepiece/kOk :ok
+   sentencepiece/kOutOfRange :out-of-range
+   sentencepiece/kPermissionDenied :permission-denied
+   sentencepiece/kResourceExhausted :exhausted
+   sentencepiece/kUnauthenticated :unaunthenticated
+   sentencepiece/kUnavailable :unavailable
+   sentencepiece/kUnimplemented :unimplemented
+   sentencepiece/kUnknown :unknown})
+
 (defn spp [source]
   (cond
     (bytes? source) (throw (UnsupportedOperationException. "TODO"))
@@ -260,6 +280,9 @@
                                  :eos (.eos_id processor)
                                  :bos (.bos_id processor)
                                  :unk (.unk_id processor)}
-                                (sp-streaming-decoder processor))))
+                                (sp-streaming-decoder processor))
+                         (dragan-says-ex "Error during tokenizer initialization."
+                                         {:status (status-codes (.code status))
+                                          :source source})))
     :default (dragan-says-ex "This source type is unsupported." {:requested (type source)
                                                                  :required String})))
