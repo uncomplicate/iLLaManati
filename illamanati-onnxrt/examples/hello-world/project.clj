@@ -11,7 +11,7 @@
                  ;; dependency!
                  [org.uncomplicate/deep-diamond-dnnl "0.46.1"]
                  [org.uncomplicate/illamanati-base "0.7.0"]
-                 [org.uncomplicate/illamanati-onnxrt "0.8.0-SNAPSHOT"]]
+                 [org.uncomplicate/illamanati-onnxrt "0.8.0"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
