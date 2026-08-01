@@ -15,8 +15,10 @@ and LLM runner backends. Currently, available backends are:
 
 ## How to use it
 
+As usual with Uncomplicate projects, there's a [Hello World project to get you started](https://github.com/uncomplicate/iLLaManati/tree/main/illamanati-onnxrt/examples/hello-world).
+
 Until I set up a dedicated website with the documentation and tutorials, please refer to my
-blog [Dragan Rocks](https://dragan.rocks), the [ONNX Runtime backend tests](https://github.com/uncomplicate/iLLaManati/blob/main/illamanati-onnxrt/test/uncomplicate/illamanati/internal/onnxrt/generator_test.clj).
+blog [Dragan Rocks](https://dragan.rocks), the [ONNX Runtime backend tests](https://github.com/uncomplicate/iLLaManati/blob/main/illamanati-onnxrt/test/uncomplicate/illamanati/internal/onnxrt/generator_test.clj), and [Hello World project](https://github.com/uncomplicate/iLLaManati/tree/main/illamanati-onnxrt/examples/hello-world).
 
 There is not only enough step-by-step material there to get you started, but to deep-dive into both higher-level and lower-level features.
 
