@@ -8,7 +8,7 @@
 
 (ns hello-world.cpu-flow
   (:require [clojure.string :refer [join]]
-            [clojure.core.async :refer [io-thread <!!]]
+            [clojure.core.async :refer [thread <!!]]
             [clojure.core.async.flow :as flow :refer [create-flow start resume stop inject process]]
             [uncomplicate.diamond.native :refer []]
             [uncomplicate.illamanati :refer [encoder decoder generator-process]]
@@ -53,13 +53,16 @@
 
 (inject f [:enc :in] ["Clojure is"])
 
-(def answer (io-thread (time (join (repeatedly 600 #(<!! (:report-chan running-flow)))))))
-
-(println (<!! answer))
+(thread (loop [s (<!! (:report-chan running-flow))]
+          (if s
+            (if (not= "<end_of_turn" s)
+              (do (print s)
+                  (recur (<!! (:report-chan running-flow))))
+              (stop s))
+            (stop f))))
 
 ;; My CPU from 2019 gives me stable 15 tokens per second with Gemma 3 4b. Not bad at all.
 
-"Elapsed time: 40724.91554 msecs"
 " a dynamic, general-purpose programming language that runs on the Java Virtual Machine (JVM), .NET Common Language Runtime (CLR), and JavaScript. It's a dialect of Lisp, known for its concurrency features, immutable data structures, and functional programming paradigm.
 
 Here's a breakdown of key aspects of Clojure:

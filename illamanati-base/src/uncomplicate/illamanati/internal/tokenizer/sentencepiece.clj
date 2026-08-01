@@ -279,7 +279,8 @@
                                 {:pad (.pad_id processor)
                                  :eos (.eos_id processor)
                                  :bos (.bos_id processor)
-                                 :unk (.unk_id processor)}
+                                 :unk (.unk_id processor)
+                                 :eot (.PieceToId processor "<end_of_turn>")}
                                 (sp-streaming-decoder processor))
                          (dragan-says-ex "Error during tokenizer initialization."
                                          {:status (status-codes (.code status))

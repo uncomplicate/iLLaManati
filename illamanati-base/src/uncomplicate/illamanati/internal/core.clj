@@ -17,7 +17,7 @@
 
 ;; ======= core.async generator loop ============================================================
 
-(defn generator-loop [eos bos context-len step-engine! in-chan tok-chan]
+(defn generator-loop [{:keys [eos bos eot context-len]} step-engine! in-chan tok-chan]
   (with-release [step-engine! step-engine!]
     (let [prompt (cons bos (<!! in-chan))
           arg 1.0]
@@ -26,7 +26,7 @@
         (when (number? token) (>!! tok-chan token))
         (cond (or (not token) (= :stop token)) (close! tok-chan)
               (= :pause token) (recur n (<!! in-chan));;TODO cover a continuation prompt here when that becomes available.
-              (= eos token) (recur (inc n) (<!! in-chan));;TODO cover a continuation prompt here when that becomes available.
+              (#{eos eot} token) (recur (inc n) (<!! in-chan));;TODO cover a continuation prompt here when that becomes available.
               (< n context-len) (recur (inc n);;TODO if I receive a signal I should not increase n
                                        (alt!! in-chan ([signal] signal)
                                               :default (first (step-engine! arg))))
@@ -41,7 +41,7 @@
           :next "Self-trigger loop counter"}})
 
 (defn generator-init [fact provider]
-  (into (select-keys (info provider) [:eos :bos :context-len])
+  (into (info provider)
         {:step-engine (api/step-engine provider fact)}))
 
 (defn generator-transition [state transition]
@@ -49,12 +49,12 @@
     ::flow/stop (update state :step-engine release)
     state))
 
-(defn generator-transform [{:keys [step-engine bos eos context-len] :as state} port data]
+(defn generator-transform [{:keys [step-engine bos eos eot context-len] :as state} port data]
   (let [[n [token :as msg]] (case port
                               :prompt [(inc (count data)) (step-engine (cons bos data) 1.0)]
                               :step [(inc data) (step-engine 1.0)]
                               [context-len nil])]
-    [state (if (and token (not= eos token) (< n context-len))
+    [state (if (and token (not (#{eos eot} token)) (< n context-len))
              {:token msg :next [n]}
              {:token msg})]))
 
@@ -63,12 +63,7 @@
 (defmethod api/generator :default
   ([provider in-chan tok-chan]
    (let-release [step-engine! (api/step-engine provider *diamond-factory*)]
-     (thread (generator-loop (info provider :eos)
-                             (info provider :bos)
-                             (info provider :context-len)
-                             step-engine!
-                             in-chan
-                             tok-chan)))
+     (thread (generator-loop (info provider) step-engine! in-chan tok-chan)))
    tok-chan)
   ([provider]
    (fn

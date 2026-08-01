@@ -1,4 +1,4 @@
-(defproject hello-world "0.8.0"
+(defproject hello-world "0.9.0"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
@@ -10,14 +10,14 @@
                  ;; If you want to try the Hello World without AOT, just comment out the uncomplicate/deep-diamond
                  ;; dependency!
                  [org.uncomplicate/deep-diamond-dnnl "0.46.1"]
-                 [org.uncomplicate/illamanati-base "0.7.0"]
-                 [org.uncomplicate/illamanati-onnxrt "0.8.0"]]
+                 [org.uncomplicate/illamanati-base "0.9.0"]
+                 [org.uncomplicate/illamanati-onnxrt "0.9.0"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
   :profiles {:dev [:dev/all ~(leiningen.core.utils/get-os)]
              :dev/all {}
-             :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.6.0"]
+             :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.9.0"]
                                     #_[org.uncomplicate/snapdragan-cuda "0.8.0"]
                                     [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-20260730.122756-6"]
                                     [org.uncomplicate/neanderthal-mkl "0.65.0"]

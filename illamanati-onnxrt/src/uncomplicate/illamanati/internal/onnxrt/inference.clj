@@ -201,7 +201,8 @@
     (release decode-bind)
     (release run-session!)
     (release sess)
-    (release opt))
+    (release opt)
+    (run! release (deref kvmans)))
   Transfer
   (input [_]
     decode-input-x)

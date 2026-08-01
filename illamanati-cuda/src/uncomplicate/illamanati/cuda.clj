@@ -29,9 +29,7 @@
        (let-release [step-engine! (api/step-engine provider fact)]
          (thread (binding [*diamond-factory* fact]
                    (in-context ctx
-                     (generator-loop (info provider :eos)
-                                     (info provider :bos)
-                                     (info provider :context-len)
+                     (generator-loop (info provider)
                                      step-engine!
                                      in-chan
                                      tok-chan))

@@ -1,4 +1,4 @@
-(defproject org.uncomplicate/illamanati-onnxrt "0.8.0"
+(defproject org.uncomplicate/illamanati-onnxrt "0.9.0"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
@@ -7,7 +7,7 @@
                  [org.uncomplicate/deep-diamond-dnnl "0.46.1"]
                  [org.uncomplicate/diamond-onnxrt "0.29.0"]
                  [org.uncomplicate/snapdragan-base "0.8.0"]
-                 [org.uncomplicate/illamanati-base "0.7.0"]]
+                 [org.uncomplicate/illamanati-base "0.9.0-SNAPSHOT"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
@@ -21,7 +21,7 @@
                                      *print-length* 128}
                        :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=tru"
                                             "--enable-native-access=ALL-UNNAMED"]}
-             :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.6.0"]
+             :linux {:dependencies [[org.uncomplicate/illamanati-cuda "0.9.0-SNAPSHOT"]
                                     [org.uncomplicate/snapdragan-cuda "0.8.0"]
                                     [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-20260730.122756-6"]
                                     [org.uncomplicate/neanderthal-mkl "0.65.0"]
@@ -30,7 +30,7 @@
                                     [org.bytedeco/cuda-redist-cublas "13.2-9.21-1.5.14-20260703.164546-11" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-cudnn "13.2-9.21-1.5.14-20260703.164735-11" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-nccl "13.2-9.21-1.5.14-20260703.164522-11" :classifier "linux-x86_64"]]}
-             :windows {:dependencies [[org.uncomplicate/illamanati-cuda "0.6.0"]
+             :windows {:dependencies [[org.uncomplicate/illamanati-cuda "0.9.0"]
                                       [org.uncomplicate/snapdragan-cuda "0.8.0"]
                                       [org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-20260730.122756-6"]
                                       [org.uncomplicate/neanderthal-mkl "0.65.0"]
