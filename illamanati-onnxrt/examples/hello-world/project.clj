@@ -1,4 +1,4 @@
-(defproject hello-world "0.6.0"
+(defproject hello-world "0.7.0"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
@@ -9,9 +9,8 @@
                  ;; which then might clash with the versions that you project includes.
                  ;; If you want to try the Hello World without AOT, just comment out the uncomplicate/deep-diamond
                  ;; dependency!
-                 [uncomplicate/deep-diamond "0.46.1"]
-                 [org.uncomplicate/illamanati-base "0.7.0-SNAPSHOT"]
-                 [org.uncomplicate/illamanati-onnxrt "0.6.0"]]
+                 [org.uncomplicate/illamanati-base "0.7.0"]
+                 [org.uncomplicate/illamanati-onnxrt "0.7.0"]]
 
   ;; Most of the following dependencies can be left out if you already have compatible binaries
   ;; installed globally through your operating system's package manager.
@@ -20,7 +19,8 @@
              :linux {:dependencies [[org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-20260730.122756-6"]
                                     [org.uncomplicate/neanderthal-mkl "0.65.0"]
                                     [org.bytedeco/mkl "2025.3-1.5.13" :classifier "linux-x86_64-redist"]
-                                    [org.uncomplicate/deep-diamond-cuda "0.46.1"]
+                                    [org.uncomplicate/illamanati-cuda "0.6.0"]
+                                    #_[org.uncomplicate/snapdragan-cuda "0.8.0"]
                                     [org.bytedeco/cuda-platform "13.2-9.21-1.5.14-20260703.164451-4"]
                                     [org.bytedeco/cuda-redist "13.2-9.21-1.5.14-20260703.164521-11" :classifier "linux-x86_64"]
                                     [org.bytedeco/cuda-redist-cublas "13.2-9.21-1.5.14-20260703.164546-11" :classifier "linux-x86_64"]
@@ -29,7 +29,8 @@
              :windows {:dependencies [[org.bytedeco/onnxruntime-platform-gpu "1.28.0-1.5.14-20260730.122756-6"]
                                       [org.uncomplicate/neanderthal-mkl "0.65.0"]
                                       [org.bytedeco/mkl "2025.3-1.5.13" :classifier "windows-x86_64-redist"]
-                                      [org.uncomplicate/deep-diamond-cuda "0.46.1"]
+                                      [org.uncomplicate/illamanati-cuda "0.6.0"]
+                                      #_[org.uncomplicate/snapdragan-cuda "0.8.0"]
                                       [org.bytedeco/cuda-platform "13.2-9.21-1.5.14-20260703.164451-4"]
                                       [org.bytedeco/cuda-redist "13.2-9.21-1.5.14-20260703.164521-11" :classifier "windows-x86_64"]
                                       [org.bytedeco/cuda-redist-cublas "13.2-9.21-1.5.14-20260703.164546-11" :classifier "windows-x86_64"]
