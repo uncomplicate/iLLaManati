@@ -1,9 +1,9 @@
-(defproject org.uncomplicate/illamanati-cuda "0.9.0"
+(defproject org.uncomplicate/illamanati-cuda "0.10.0-SNAPSHOT"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.5"]
                  [org.clojure/core.async "1.10.874-alpha3"]
-                 [org.bytedeco/cuda-platform "13.2-9.21-1.5.14-20260703.164451-4"]
+                 [org.bytedeco/cuda-platform "13.3-9.25-1.5.14-SNAPSHOT"]
                  [org.uncomplicate/deep-diamond-base "0.46.1"]
                  [org.uncomplicate/deep-diamond-cuda "0.46.1"]
                  [org.uncomplicate/illamanati-base "0.9.0"]]
